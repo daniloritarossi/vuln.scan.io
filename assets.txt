@@ -1,0 +1,15 @@
+# Asset inventory. One asset per line.
+# Format:  IP|username|password
+# Empty user+pass (e.g. "1.2.3.4||" or just "1.2.3.4") => "Autenticazione non richiesta".
+# Lines starting with # are ignored.
+#
+# 45.33.32.156 = scanme.nmap.org (authorized public scan target by Nmap project).
+
+45.33.32.156||
+scanme.nmap.org
+93.184.216.34|admin|secret123
+scanme2.nmap.org
+zonetransfer.me
+estphp.vulnweb.com|admin|admin
+testaspnet.vulnweb.com|admin|admin
+http://testhtml5.vulnweb.com

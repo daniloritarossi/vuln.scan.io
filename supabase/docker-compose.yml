@@ -1,0 +1,94 @@
+# Stack Supabase locale "lean" per il Vulnerability Feed Aggregator.
+#
+#   db       -> Postgres (flavor Supabase, con ruoli anon/authenticated/service_role)
+#   meta     -> postgres-meta (introspezione schema per Studio)
+#   studio   -> GUI web (table editor / SQL editor)        http://localhost:3001
+#   rest     -> PostgREST (API REST su public)             interno :3000
+#   gateway  -> nginx: instrada /rest/v1/* -> rest:3000     http://localhost:8001
+#
+# La persistenza e' su bind-mount: ./volumes/db/data e' una cartella REALE del PC
+# montata dentro il container Postgres. I dati sopravvivono a 'down'/reboot.
+#
+# Avvio consigliato: ./setup.sh (crea schema + ricarica PostgREST).
+
+name: vfa-supabase
+
+services:
+  db:
+    image: supabase/postgres:15.14.1.138
+    container_name: vfa-supabase-db
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      # Cartella condivisa PC <-> container: persistenza reale dei dati.
+      - ./volumes/db/data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  rest:
+    image: postgrest/postgrest:v14.13
+    container_name: vfa-supabase-rest
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGRST_DB_URI: postgres://authenticator:${POSTGRES_PASSWORD}@db:5432/postgres
+      PGRST_DB_SCHEMAS: public
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_JWT_SECRET: ${JWT_SECRET}
+      PGRST_DB_USE_LEGACY_GUCS: "false"
+
+  meta:
+    image: supabase/postgres-meta:v0.96.6
+    container_name: vfa-supabase-meta
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PG_META_PORT: "8080"
+      PG_META_DB_HOST: db
+      PG_META_DB_PORT: "5432"
+      PG_META_DB_NAME: postgres
+      PG_META_DB_USER: postgres
+      PG_META_DB_PASSWORD: ${POSTGRES_PASSWORD}
+
+  studio:
+    image: supabase/studio:2026.06.15-sha-a412298
+    container_name: vfa-supabase-studio
+    restart: unless-stopped
+    depends_on:
+      - meta
+      - rest
+    ports:
+      - "3001:3000"
+    environment:
+      STUDIO_PG_META_URL: http://meta:8080
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      DEFAULT_ORGANIZATION_NAME: ${DEFAULT_ORGANIZATION_NAME}
+      DEFAULT_PROJECT_NAME: ${DEFAULT_PROJECT_NAME}
+      SUPABASE_URL: http://gateway:8000
+      SUPABASE_PUBLIC_URL: http://localhost:8001
+      SUPABASE_ANON_KEY: ${ANON_KEY}
+      SUPABASE_SERVICE_KEY: ${SERVICE_ROLE_KEY}
+      AUTH_JWT_SECRET: ${JWT_SECRET}
+
+  gateway:
+    image: nginx:1.27-alpine
+    container_name: vfa-supabase-gateway
+    restart: unless-stopped
+    depends_on:
+      - rest
+    ports:
+      # 8001 sul PC -> 8000 nel container. (8000 sul PC e' usato dall'app FastAPI.)
+      - "8001:8000"
+    volumes:
+      - ./volumes/gateway/nginx.conf:/etc/nginx/nginx.conf:ro
