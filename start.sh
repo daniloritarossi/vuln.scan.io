@@ -184,13 +184,13 @@ _wizard_search() {
   fi
 }
 
-# ── Helper: aggiunta asset a assets.txt (cifrata/chiaro/no) ───────────────────
+# ── Helper: aggiunta asset all'inventario Supabase (cifrata/chiaro/no) ────────
 
 _add_to_assets() {
   # _add_to_assets IP OSTYPE OSVER
   local _ip="$1" _os="$2" _osver="$3"
   local _add
-  _add=$(_choose "Aggiungere a assets.txt?" \
+  _add=$(_choose "Aggiungere all'inventario asset?" \
     "Si — aggiungi con credenziali cifrate" \
     "Si — aggiungi con password in chiaro" \
     "No")
@@ -209,8 +209,23 @@ _add_to_assets() {
       printf '  ⚠  Cifratura non configurata (encdec) — password salvata in chiaro.\n' >&2
     fi
   fi
-  printf '%s|admin|%s|%s|%s\n' "$_ip" "$_stored_pw" "$_os" "$_osver" >> assets.txt
-  printf '  ✓  Aggiunto a assets.txt: %s (os=%s)\n' "$_ip" "$_os" >&2
+  # Inserimento nella tabella 'assets' via PostgREST (Supabase locale).
+  local _sb_url="${SUPABASE_URL:-http://localhost:8001}"
+  local _sb_key="${SUPABASE_SERVICE_KEY:-}"
+  if [ -z "$_sb_key" ] && [ -f supabase/.env ]; then
+    _sb_key=$(grep -m1 '^SERVICE_ROLE_KEY=' supabase/.env | cut -d= -f2-)
+  fi
+  local _payload
+  _payload=$(printf '{"ip":"%s","username":"admin","password":"%s","os_type":"%s","os_major_version":"%s","enabled":true}' \
+    "$_ip" "$_stored_pw" "$_os" "$_osver")
+  if curl -sf -X POST "$_sb_url/rest/v1/assets" \
+       -H "apikey: $_sb_key" -H "Authorization: Bearer $_sb_key" \
+       -H "Content-Type: application/json" \
+       -d "$_payload" >/dev/null 2>&1; then
+    printf '  ✓  Aggiunto all'"'"'inventario (Supabase): %s (os=%s)\n' "$_ip" "$_os" >&2
+  else
+    printf '  ⚠  Supabase non raggiungibile — asset NON aggiunto: %s\n' "$_ip" >&2
+  fi
 }
 
 # ── Wizard: scelta macchina di test (Linux | Windows) ─────────────────────────
@@ -246,7 +261,7 @@ FROM ubuntu:20.04
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get install -y \
-    openssh-server sudo software-properties-common gnupg && \
+    openssh-server sudo software-properties-common gnupg binutils && \
     add-apt-repository ppa:deadsnakes/ppa && \
     apt-get update && apt-get install -y python3.6 && \
     rm -rf /var/lib/apt/lists/*

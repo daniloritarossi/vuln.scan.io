@@ -1,0 +1,35 @@
+{# Shared desktop navigation drawer. Expects: active_page. #}
+{% set nav_items = [
+  {'page': 'dashboard', 'href': '/',         'icon': 'dashboard',    'key': 'nav.dashboard', 'text': 'DASHBOARD'},
+  {'page': 'assets',    'href': '/assets',   'icon': 'inventory_2',  'key': 'nav.assets',    'text': 'ASSETS'},
+  {'page': 'intel',     'href': '/intel',    'icon': 'psychology',   'key': 'nav.posture',   'text': 'SECURITY POSTURE'},
+  {'page': 'audit',     'href': '/audit',    'icon': 'fact_check',   'key': 'nav.audit',     'text': 'AUDIT'},
+  {'page': 'sbom',      'href': '/sbom',     'icon': 'receipt_long', 'key': 'nav.sbom',      'text': 'SBOM'},
+  {'page': 'settings',  'href': '/settings', 'icon': 'settings',     'key': 'nav.settings',  'text': 'SETTINGS'}
+] %}
+<!-- NavigationDrawer (Web) -->
+<nav
+  class="hidden md:flex flex-col py-panel-padding gap-base-unit fixed left-0 top-16 h-[calc(100vh-64px)] w-64 bg-white/40 backdrop-blur-xl border-r border-slate-200/50 z-40">
+  <div class="px-6 mb-4">
+    <span class="font-label-caps text-label-caps text-slate-400 tracking-[0.2em]">CORE_NAV</span>
+  </div>
+  <ul class="flex flex-col w-full px-4 gap-2">
+    {% for it in nav_items %}
+    <li>
+      {% if it.page == active_page %}
+      <a class="flex items-center gap-3 px-4 py-3 text-white bg-slate-900 rounded-xl font-label-caps text-label-caps shadow-lg shadow-slate-900/10 transition-transform hover:scale-[1.02]"
+        href="{{ it.href }}">
+        <span class="material-symbols-outlined text-cyan-400">{{ it.icon }}</span>
+        <span data-i18n="{{ it.key }}">{{ it.text }}</span>
+      </a>
+      {% else %}
+      <a class="flex items-center gap-3 px-4 py-3 text-slate-600 hover:text-slate-900 hover:bg-white/60 rounded-xl transition-all font-label-caps text-label-caps"
+        href="{{ it.href }}">
+        <span class="material-symbols-outlined">{{ it.icon }}</span>
+        <span data-i18n="{{ it.key }}">{{ it.text }}</span>
+      </a>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+</nav>

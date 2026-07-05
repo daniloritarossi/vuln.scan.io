@@ -15,7 +15,7 @@
   <link
     href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
     rel="stylesheet" />
-  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <script src="/static/vendor/tailwind.js"></script>
   <script id="tailwind-config">
     tailwind.config = {
       darkMode: "class",
@@ -94,6 +94,7 @@
     }
   </style>
   <style>body { min-height: max(884px, 100dvh); }</style>
+  <script src="/static/i18n.js?v=9"></script>
 </head>
 
 <body
@@ -160,78 +161,15 @@
     </script>
   </div>
 
-  <!-- TopAppBar -->
-  <header
-    class="fixed top-0 w-full z-50 bg-white/80 backdrop-blur-xl border-b border-slate-200/50 flex justify-between items-center px-margin-desktop h-16 transition-all">
-    <div class="flex items-center gap-4">
-      <img src="/static/logo-icon.svg" class="w-11 h-11" alt="VULN.SCAN.IO" />
-      <h1 class="font-headline-md text-headline-md font-bold tracking-tight"><span
-          class="text-orange-500">VULN</span><span class="text-slate-400">.</span><span
-          class="text-orange-500">SCAN</span><span class="text-slate-400">.</span><span class="text-cyan-500">IO</span>
-      </h1>
-      <span
-        class="font-label-caps text-label-caps text-cyan-600 tracking-[0.2em] ml-4 hidden md:block px-2.5 py-1 bg-cyan-50 rounded-full border border-cyan-100/50">SETTINGS</span>
-    </div>
-    <div class="flex items-center gap-3">
-      <div class="text-slate-500 hover:text-cyan-600 hover:glow-sm transition-all duration-150 cursor-pointer">
-        <span class="material-symbols-outlined">sensors</span>
-      </div>
-    </div>
-  </header>
+{% set active_page = 'settings' %}
+{% set crumbs = [
+  {'key': 'crumb.home', 'text': 'Home', 'href': '/'},
+  {'key': 'settings.tag', 'text': 'Settings'}
+] %}
+  {% include 'partials/topbar.html' %}
 
   <div class="flex pt-16 h-screen w-full overflow-hidden">
-    <!-- NavigationDrawer (Web) -->
-    <nav
-      class="hidden md:flex flex-col py-panel-padding gap-base-unit fixed left-0 top-16 h-[calc(100vh-64px)] w-64 bg-white/40 backdrop-blur-xl border-r border-slate-200/50 z-40">
-      <div class="px-6 mb-4">
-        <span class="font-label-caps text-label-caps text-slate-400 tracking-[0.2em]">CORE_NAV</span>
-      </div>
-      <ul class="flex flex-col w-full px-4 gap-2">
-        <li>
-          <a class="flex items-center gap-3 px-4 py-3 text-slate-600 hover:text-slate-900 hover:bg-white/60 rounded-xl transition-all font-label-caps text-label-caps"
-            href="/">
-            <span class="material-symbols-outlined">dashboard</span>
-            <span>DASHBOARD</span>
-          </a>
-        </li>
-        <li>
-          <a class="flex items-center gap-3 px-4 py-3 text-slate-600 hover:text-slate-900 hover:bg-white/60 rounded-xl transition-all font-label-caps text-label-caps"
-            href="/assets">
-            <span class="material-symbols-outlined">inventory_2</span>
-            <span>ASSETS</span>
-          </a>
-        </li>
-        <li>
-          <a class="flex items-center gap-3 px-4 py-3 text-slate-600 hover:text-slate-900 hover:bg-white/60 rounded-xl transition-all font-label-caps text-label-caps"
-            href="/intel">
-            <span class="material-symbols-outlined">psychology</span>
-            <span>SECURITY POSTURE</span>
-          </a>
-        </li>
-        <li>
-          <a class="flex items-center gap-3 px-4 py-3 text-slate-600 hover:text-slate-900 hover:bg-white/60 rounded-xl transition-all font-label-caps text-label-caps"
-            href="/audit">
-            <span class="material-symbols-outlined">fact_check</span>
-            <span>AUDIT</span>
-          </a>
-        </li>
-        <li>
-          <a class="flex items-center gap-3 px-4 py-3 text-slate-600 hover:text-slate-900 hover:bg-white/60 rounded-xl transition-all font-label-caps text-label-caps"
-            href="/sbom">
-            <span class="material-symbols-outlined">receipt_long</span>
-            <span>SBOM</span>
-          </a>
-        </li>
-        <!-- Active: SETTINGS -->
-        <li>
-          <a class="flex items-center gap-3 px-4 py-3 text-white bg-slate-900 rounded-xl font-label-caps text-label-caps shadow-lg shadow-slate-900/10 transition-transform hover:scale-[1.02]"
-            href="/settings">
-            <span class="material-symbols-outlined text-cyan-400">settings</span>
-            <span>SETTINGS</span>
-          </a>
-        </li>
-      </ul>
-    </nav>
+  {% include 'partials/sidebar.html' %}
 
     <!-- Main Content Canvas -->
     <main class="flex-1 md:ml-64 p-4 md:p-8 overflow-y-auto pb-24 md:pb-8 relative w-full h-full">
@@ -240,15 +178,15 @@
         <!-- Page header -->
         <div class="flex items-center justify-between flex-wrap gap-4">
           <div>
-            <h2 class="font-display-lg text-3xl font-bold tracking-tight text-slate-900">Application Settings</h2>
-            <p class="font-code-sm text-code-sm text-slate-500 mt-1">Persisted in
+            <h2 class="font-display-lg text-3xl font-bold tracking-tight text-slate-900" data-i18n="settings.header">Application Settings</h2>
+            <p class="font-code-sm text-code-sm text-slate-500 mt-1"><span data-i18n="settings.persisted">Persisted in</span>
               <span class="text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded">config.json</span>
             </p>
           </div>
           <button id="saveBtn"
             class="flex items-center gap-2 bg-slate-900 text-white font-label-caps text-label-caps px-5 py-2.5 rounded-xl hover:bg-slate-700 transition-colors shadow-lg">
             <span class="material-symbols-outlined text-cyan-400" style="font-size:18px">save</span>
-            SAVE
+            <span data-i18n="common.save">SAVE</span>
           </button>
         </div>
 
@@ -259,14 +197,14 @@
         <section class="neural-panel rounded-2xl p-6 space-y-5">
           <div class="flex items-center gap-3 mb-1">
             <span class="material-symbols-outlined text-cyan-500">search</span>
-            <h3 class="font-label-caps text-label-caps text-slate-800 tracking-[0.15em]">SEARCH ENGINE (OSINT)</h3>
+            <h3 class="font-label-caps text-label-caps text-slate-800 tracking-[0.15em]" data-i18n="settings.se_title">SEARCH ENGINE (OSINT)</h3>
           </div>
 
           <!-- Provider toggle -->
           <div class="flex items-center justify-between">
             <div>
-              <p class="font-code-sm text-code-sm text-slate-700 font-semibold">Provider</p>
-              <p class="font-code-sm text-code-sm text-slate-400 mt-0.5">Web search engine used for OSINT enrichment</p>
+              <p class="font-code-sm text-code-sm text-slate-700 font-semibold" data-i18n="settings.provider">Provider</p>
+              <p class="font-code-sm text-code-sm text-slate-400 mt-0.5" data-i18n="settings.se_provider_hint">Web search engine used for OSINT enrichment</p>
             </div>
             <div class="flex gap-2">
               <button id="providerDdg"
@@ -282,22 +220,22 @@
 
           <!-- Serper API key (shown only when serper selected) -->
           <div id="serperBlock" class="hidden space-y-1">
-            <label class="font-code-sm text-code-sm text-slate-600 font-semibold">Serper API Key</label>
-            <input id="serperKey" type="password" class="setting-input" placeholder="Enter Serper API key…" />
-            <p class="font-code-sm text-code-sm text-slate-400">Get a key at serper.dev — free tier: 2500 queries/month</p>
+            <label class="font-code-sm text-code-sm text-slate-600 font-semibold" data-i18n="settings.serper_key">Serper API Key</label>
+            <input id="serperKey" type="password" class="setting-input" data-i18n-ph="settings.serper_key_ph" placeholder="Enter Serper API key…" />
+            <p class="font-code-sm text-code-sm text-slate-400" data-i18n="settings.serper_hint">Get a key at serper.dev — free tier: 2500 queries/month</p>
           </div>
 
           <!-- Advanced thresholds -->
           <div class="grid grid-cols-2 gap-4">
             <div class="space-y-1">
-              <label class="font-code-sm text-code-sm text-slate-600 font-semibold">Min OSINT Hits</label>
+              <label class="font-code-sm text-code-sm text-slate-600 font-semibold" data-i18n="settings.min_hits">Min OSINT Hits</label>
               <input id="minOsintHits" type="number" min="1" max="20" class="setting-input" />
-              <p class="font-code-sm text-code-sm text-slate-400">Product must appear ≥ N times in results</p>
+              <p class="font-code-sm text-code-sm text-slate-400" data-i18n="settings.min_hits_hint">Product must appear ≥ N times in results</p>
             </div>
             <div class="space-y-1">
-              <label class="font-code-sm text-code-sm text-slate-600 font-semibold">Min Query Length</label>
+              <label class="font-code-sm text-code-sm text-slate-600 font-semibold" data-i18n="settings.min_query">Min Query Length</label>
               <input id="minOsintQuery" type="number" min="1" max="20" class="setting-input" />
-              <p class="font-code-sm text-code-sm text-slate-400">Min alphanumeric chars to trust OSINT</p>
+              <p class="font-code-sm text-code-sm text-slate-400" data-i18n="settings.min_query_hint">Min alphanumeric chars to trust OSINT</p>
             </div>
           </div>
         </section>
@@ -306,18 +244,18 @@
         <section class="neural-panel rounded-2xl p-6 space-y-5">
           <div class="flex items-center gap-3 mb-1">
             <span class="material-symbols-outlined text-cyan-500">psychology</span>
-            <h3 class="font-label-caps text-label-caps text-slate-800 tracking-[0.15em]">AI / LLM</h3>
+            <h3 class="font-label-caps text-label-caps text-slate-800 tracking-[0.15em]" data-i18n="settings.ai_title">AI / LLM</h3>
           </div>
 
           <!-- Provider toggle -->
           <div class="flex items-center justify-between">
             <div>
-              <p class="font-code-sm text-code-sm text-slate-700 font-semibold">Provider</p>
-              <p class="font-code-sm text-code-sm text-slate-400 mt-0.5">Used for CVE summaries and advisory extraction</p>
+              <p class="font-code-sm text-code-sm text-slate-700 font-semibold" data-i18n="settings.provider">Provider</p>
+              <p class="font-code-sm text-code-sm text-slate-400 mt-0.5" data-i18n="settings.ai_provider_hint">Used for CVE summaries and advisory extraction</p>
             </div>
             <div class="flex gap-2">
               <button id="aiOllama"
-                class="px-4 py-1.5 rounded-lg font-label-caps text-label-caps border transition-all">
+                class="px-4 py-1.5 rounded-lg font-label-caps text-label-caps border transition-all" data-i18n="settings.ollama_local">
                 OLLAMA (LOCAL)
               </button>
               <button id="aiClaude"
@@ -331,21 +269,21 @@
           <div id="ollamaBlock" class="space-y-4">
             <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div class="space-y-1">
-                <label class="font-code-sm text-code-sm text-slate-600 font-semibold">Ollama URL</label>
+                <label class="font-code-sm text-code-sm text-slate-600 font-semibold" data-i18n="settings.ollama_url">Ollama URL</label>
                 <input id="ollamaUrl" type="text" class="setting-input" placeholder="http://localhost:11434/api/generate" />
               </div>
               <div class="space-y-1">
-                <label class="font-code-sm text-code-sm text-slate-600 font-semibold">Ollama Model</label>
+                <label class="font-code-sm text-code-sm text-slate-600 font-semibold" data-i18n="settings.ollama_model">Ollama Model</label>
                 <div class="flex gap-2">
                   <select id="ollamaModel" class="setting-input flex-1">
-                    <option value="">— load models —</option>
+                    <option value="" data-i18n="settings.ollama_load">— load models —</option>
                   </select>
-                  <button id="reloadModels" title="Reload models from Ollama"
+                  <button id="reloadModels" data-i18n-title="settings.ollama_reload_t" title="Reload models from Ollama"
                     class="flex items-center justify-center px-2.5 rounded-lg border border-slate-200 bg-white hover:border-cyan-400 transition-colors text-slate-500 hover:text-cyan-600">
                     <span class="material-symbols-outlined" style="font-size:18px">refresh</span>
                   </button>
                 </div>
-                <p class="font-code-sm text-code-sm text-slate-400">Models pulled on local Ollama instance</p>
+                <p class="font-code-sm text-code-sm text-slate-400" data-i18n="settings.ollama_hint">Models pulled on local Ollama instance</p>
               </div>
             </div>
           </div>
@@ -354,12 +292,12 @@
           <div id="claudeBlock" class="hidden space-y-4">
             <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div class="space-y-1">
-                <label class="font-code-sm text-code-sm text-slate-600 font-semibold">Claude API Key</label>
+                <label class="font-code-sm text-code-sm text-slate-600 font-semibold" data-i18n="settings.claude_key">Claude API Key</label>
                 <input id="claudeKey" type="password" class="setting-input" placeholder="sk-ant-…" />
-                <p class="font-code-sm text-code-sm text-slate-400">Get a key at console.anthropic.com</p>
+                <p class="font-code-sm text-code-sm text-slate-400" data-i18n="settings.claude_hint">Get a key at console.anthropic.com</p>
               </div>
               <div class="space-y-1">
-                <label class="font-code-sm text-code-sm text-slate-600 font-semibold">Claude Model</label>
+                <label class="font-code-sm text-code-sm text-slate-600 font-semibold" data-i18n="settings.claude_model">Claude Model</label>
                 <input id="claudeModel" type="text" class="setting-input" placeholder="claude-haiku-4-5-20251001" />
               </div>
             </div>
@@ -368,14 +306,14 @@
           <!-- Timeouts -->
           <div class="grid grid-cols-2 gap-4">
             <div class="space-y-1">
-              <label class="font-code-sm text-code-sm text-slate-600 font-semibold">Summary Timeout (s)</label>
+              <label class="font-code-sm text-code-sm text-slate-600 font-semibold" data-i18n="settings.summary_to">Summary Timeout (s)</label>
               <input id="summaryTimeout" type="number" min="5" max="300" class="setting-input" />
-              <p class="font-code-sm text-code-sm text-slate-400">CVE summary generation</p>
+              <p class="font-code-sm text-code-sm text-slate-400" data-i18n="settings.summary_to_hint">CVE summary generation</p>
             </div>
             <div class="space-y-1">
-              <label class="font-code-sm text-code-sm text-slate-600 font-semibold">Advisory Timeout (s)</label>
+              <label class="font-code-sm text-code-sm text-slate-600 font-semibold" data-i18n="settings.advisory_to">Advisory Timeout (s)</label>
               <input id="advisoryTimeout" type="number" min="5" max="300" class="setting-input" />
-              <p class="font-code-sm text-code-sm text-slate-400">Affected version extraction</p>
+              <p class="font-code-sm text-code-sm text-slate-400" data-i18n="settings.advisory_to_hint">Affected version extraction</p>
             </div>
           </div>
         </section>
@@ -384,14 +322,14 @@
         <section class="neural-panel rounded-2xl p-6 space-y-5">
           <div class="flex items-center gap-3 mb-1">
             <span class="material-symbols-outlined text-cyan-500">radar</span>
-            <h3 class="font-label-caps text-label-caps text-slate-800 tracking-[0.15em]">SCANNER</h3>
+            <h3 class="font-label-caps text-label-caps text-slate-800 tracking-[0.15em]" data-i18n="settings.scanner_title">SCANNER</h3>
           </div>
 
           <!-- Simulate Auth toggle -->
           <div class="flex items-center justify-between">
             <div>
-              <p class="font-code-sm text-code-sm text-slate-700 font-semibold">Simulate Authenticated Scans</p>
-              <p class="font-code-sm text-code-sm text-slate-400 mt-0.5">
+              <p class="font-code-sm text-code-sm text-slate-700 font-semibold" data-i18n="settings.sim_auth">Simulate Authenticated Scans</p>
+              <p class="font-code-sm text-code-sm text-slate-400 mt-0.5" data-i18n="settings.sim_auth_hint">
                 When enabled, SSH logins are simulated — no real connections. Disable only on assets you own.
               </p>
             </div>
@@ -403,9 +341,9 @@
 
           <!-- Socket Timeout -->
           <div class="space-y-1 max-w-xs">
-            <label class="font-code-sm text-code-sm text-slate-600 font-semibold">Socket Timeout (s)</label>
+            <label class="font-code-sm text-code-sm text-slate-600 font-semibold" data-i18n="settings.socket_to">Socket Timeout (s)</label>
             <input id="socketTimeout" type="number" min="0.5" max="30" step="0.5" class="setting-input" />
-            <p class="font-code-sm text-code-sm text-slate-400">TCP connection timeout for banner grabbing</p>
+            <p class="font-code-sm text-code-sm text-slate-400" data-i18n="settings.socket_to_hint">TCP connection timeout for banner grabbing</p>
           </div>
         </section>
 
@@ -417,11 +355,11 @@
           </div>
           <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div class="space-y-1">
-              <label class="font-code-sm text-code-sm text-slate-600 font-semibold">OSV API URL</label>
+              <label class="font-code-sm text-code-sm text-slate-600 font-semibold" data-i18n="settings.osv_url">OSV API URL</label>
               <input id="osvUrl" type="text" class="setting-input" placeholder="https://api.osv.dev/v1/query" />
             </div>
             <div class="space-y-1">
-              <label class="font-code-sm text-code-sm text-slate-600 font-semibold">OSV Timeout (s)</label>
+              <label class="font-code-sm text-code-sm text-slate-600 font-semibold" data-i18n="settings.osv_to">OSV Timeout (s)</label>
               <input id="osvTimeout" type="number" min="5" max="120" class="setting-input" />
             </div>
           </div>
@@ -431,23 +369,7 @@
     </main>
   </div>
 
-  <!-- BottomNavBar (Mobile) -->
-  <nav
-    class="md:hidden fixed bottom-6 left-4 right-4 flex justify-around items-center px-2 py-2 bg-white/90 backdrop-blur-xl border border-slate-200/50 rounded-2xl shadow-2xl z-50">
-    <a class="flex flex-col items-center justify-center text-slate-400 p-3 hover:text-cyan-600 transition-all" href="/">
-      <span class="material-symbols-outlined">dashboard</span>
-    </a>
-    <a class="flex flex-col items-center justify-center text-slate-400 p-3 hover:text-cyan-600 transition-all" href="/assets">
-      <span class="material-symbols-outlined">inventory_2</span>
-    </a>
-    <a class="flex flex-col items-center justify-center bg-slate-900 text-cyan-400 shadow-xl rounded-xl p-3 -mt-6 border-4 border-white"
-      href="/settings">
-      <span class="material-symbols-outlined">settings</span>
-    </a>
-    <a class="flex flex-col items-center justify-center text-slate-400 p-3 hover:text-cyan-600 transition-all" href="/audit">
-      <span class="material-symbols-outlined">fact_check</span>
-    </a>
-  </nav>
+  {% include 'partials/bottomnav.html' %}
 
   <script>
     const $ = id => document.getElementById(id);
@@ -520,13 +442,13 @@
       const sel = $('ollamaModel');
       const btn = $('reloadModels');
       btn.disabled = true;
-      sel.innerHTML = '<option value="">Loading…</option>';
+      sel.innerHTML = `<option value="">${t('settings.ollama_loading')}</option>`;
       try {
         const res = await fetch('/api/ollama/models');
         const data = await res.json();
         const models = data.models || [];
         if (models.length === 0) {
-          sel.innerHTML = '<option value="">— Ollama offline or no models pulled —</option>';
+          sel.innerHTML = `<option value="">${t('settings.ollama_none')}</option>`;
         } else {
           sel.innerHTML = models.map(m =>
             `<option value="${m}"${m === selectedModel ? ' selected' : ''}>${m}</option>`
@@ -534,11 +456,11 @@
           // If the saved model is not in the list, add it as first option
           if (selectedModel && !models.includes(selectedModel)) {
             sel.insertAdjacentHTML('afterbegin',
-              `<option value="${selectedModel}" selected>${selectedModel} (saved)</option>`);
+              `<option value="${selectedModel}" selected>${selectedModel} ${t('settings.ollama_saved')}</option>`);
           }
         }
       } catch (e) {
-        sel.innerHTML = '<option value="">— fetch failed —</option>';
+        sel.innerHTML = `<option value="">${t('settings.ollama_failed')}</option>`;
       } finally {
         btn.disabled = false;
       }
@@ -575,7 +497,7 @@
         $('osvUrl').value = cfg.osv?.url || '';
         $('osvTimeout').value = cfg.osv?.timeout ?? 15;
       } catch (e) {
-        showToast('Failed to load config: ' + e.message, false);
+        showToast(t('settings.load_failed') + ' ' + e.message, false);
       }
     }
 
@@ -614,12 +536,12 @@
         });
         const data = await res.json();
         if (data.ok) {
-          showToast('Settings saved.');
+          showToast(t('settings.saved'));
         } else {
-          showToast('Error: ' + (data.error || 'unknown'), false);
+          showToast(t('settings.error') + ' ' + (data.error || 'unknown'), false);
         }
       } catch (e) {
-        showToast('Save failed: ' + e.message, false);
+        showToast(t('settings.save_failed') + ' ' + e.message, false);
       }
     });
 

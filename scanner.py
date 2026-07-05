@@ -23,9 +23,10 @@ esplicita e' illecito. Usare solo su asset di cui si ha la titolarita'.
 """
 
 import re
+import shlex
 import socket
-from dataclasses import dataclass
-from typing import Optional
+from dataclasses import dataclass, field
+from typing import List, Optional
 
 from assets import Asset
 from config import load_config
@@ -98,6 +99,12 @@ class ScanResult:
     detected_version: Optional[str]
     raw_evidence: str                 # banner o nota diagnostica
     vuln_match: str                   # "VULNERABILE" | "NON VULNERABILE" | "INCERTO"
+    # Dipendenze REALI rilevate a runtime sull'asset (pacchetti che forniscono le
+    # librerie condivise effettivamente linkate dal binario). Vuota se non
+    # determinabile (no-auth, simulato, Windows, host non raggiungibile).
+    dependencies: List[str] = field(default_factory=list)
+    # Archi inter-dipendenza reali [pkgA, pkgB]: pkgA linka direttamente pkgB.
+    dep_edges: List[List[str]] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return {
@@ -108,6 +115,8 @@ class ScanResult:
             "detected_version": self.detected_version,
             "raw_evidence": self.raw_evidence[:300],
             "vuln_match": self.vuln_match,
+            "dependencies": self.dependencies,
+            "dep_edges": self.dep_edges,
         }
 
 
@@ -394,6 +403,154 @@ def _match_windows_product(product: str, out: str):
     return False, None
 
 
+# Pacchetti di base ubiqui: presenti in pratica su ogni binario (libc, loader,
+# runtime C/C++). Esclusi dal grafo perche' non informativi sulla superficie
+# d'attacco specifica del prodotto. Filtro cosmetico, non un'assunzione di
+# dipendenza: i nodi restanti restano quelli realmente linkati.
+_DEP_NOISE = {
+    "libc6", "libc", "glibc", "libc-bin", "ld-linux", "libgcc-s1", "libgcc",
+    "libstdc++6", "libstdc++", "base-files", "libcrypt1", "libcrypt",
+}
+
+# Script remoto (POSIX sh). Misura il grafo REALE attorno al binario del prodotto:
+#
+#   - DEP  <pkg>          pacchetto che fornisce una libreria condivisa
+#                         effettivamente linkata dal binario (chiusura ldd).
+#   - EDGE <pkgA> <pkgB>  pkgA linka DIRETTAMENTE una libreria di pkgB
+#                         (DT_NEEDED via objdump, fallback readelf) -> arco
+#                         inter-dipendenza reale, non presunto.
+#
+# Mappa ogni libreria al pacchetto con dpkg -S (Debian/Ubuntu) o rpm -qf
+# (RHEL/Fedora). __BINS__ e' sostituito con la lista (quotata) dei nomi binario
+# candidati del prodotto: lo script prova ciascuno finche' ne risolve uno.
+# Best-effort: nessun output se gli strumenti mancano o il binario non si risolve.
+_RUNTIME_DEPS_SH = r"""
+needed() { objdump -p "$1" 2>/dev/null | awk '/NEEDED/{print $2}'; }
+if ! command -v objdump >/dev/null 2>&1; then
+  needed() { readelf -d "$1" 2>/dev/null | sed -n 's/.*NEEDED.*\[\(.*\)\].*/\1/p'; }
+fi
+pkgof() {
+  # Risolve symlink e usr-merge (/lib -> /usr/lib, libX.so.N -> libX.so.N.M):
+  # il DB di dpkg registra solo il path reale versionato, quindi senza
+  # readlink -f 'dpkg -S' fallisce con "no path found".
+  R=$(readlink -f "$1" 2>/dev/null); [ -z "$R" ] && R="$1"
+  p=$(dpkg -S "$R" 2>/dev/null | head -1 | cut -d: -f1)
+  [ -z "$p" ] && p=$(rpm -qf --queryformat '%{NAME}\n' "$R" 2>/dev/null | head -1)
+  printf '%s' "$p"
+}
+# Risoluzione robusta del binario: prova ogni nome candidato via PATH, poi nelle
+# sbin comuni (le shell SSH non-login spesso non hanno /usr/sbin in PATH: apache2,
+# sshd, postgres vivono li'), infine dal processo attivo (pgrep).
+B=""
+for n in __BINS__; do
+  c=$(command -v "$n" 2>/dev/null)
+  if [ -z "$c" ]; then
+    for d in /usr/sbin /sbin /usr/local/sbin /usr/bin /bin /usr/local/bin; do
+      [ -x "$d/$n" ] && { c="$d/$n"; break; }
+    done
+  fi
+  if [ -z "$c" ]; then
+    P=$(pgrep -nx "$n" 2>/dev/null)
+    [ -n "$P" ] && c=$(readlink -f /proc/$P/exe 2>/dev/null)
+  fi
+  [ -n "$c" ] && { B="$c"; break; }
+done
+[ -z "$B" ] && exit 0
+LDD=$(ldd "$B" 2>/dev/null)
+SOPATH=$(printf '%s\n' "$LDD" | awk '/=>/ {print $1" "$3}' | grep ' /')
+LIBS=$(printf '%s\n' "$LDD" | awk '/=>/ {print $3}' | grep '^/' | sort -u)
+printf '%s\n' "$LIBS" | while IFS= read -r L; do
+  [ -n "$L" ] || continue
+  P=$(pkgof "$L"); [ -n "$P" ] && echo "DEP $P"
+done
+printf '%s\n' "$LIBS" | while IFS= read -r F; do
+  [ -f "$F" ] || continue
+  PA=$(pkgof "$F"); [ -z "$PA" ] && continue
+  needed "$F" | while IFS= read -r SO; do
+    [ -n "$SO" ] || continue
+    PP=$(printf '%s\n' "$SOPATH" | awk -v s="$SO" '$1==s{print $2; exit}')
+    [ -z "$PP" ] && continue
+    PB=$(pkgof "$PP"); [ -z "$PB" ] && continue
+    [ "$PA" != "$PB" ] && echo "EDGE $PA $PB"
+  done
+done
+"""
+
+
+def _parse_runtime_deps(out: str):
+    """
+    Interpreta l'output dello script -> (deps, edges).
+
+    deps:  lista di pacchetti (rumore di base escluso).
+    edges: lista di coppie [pkgA, pkgB] non orientate e deduplicate, con
+           entrambi gli estremi non-rumore (gli archi verso/da deps presenti
+           sono filtrati lato grafo).
+    """
+    deps: List[str] = []
+    edges: List[List[str]] = []
+    seen_edges = set()
+    for line in out.splitlines():
+        parts = line.split()
+        if not parts:
+            continue
+        if parts[0] == "DEP" and len(parts) >= 2:
+            pkg = parts[1]
+            if pkg not in _DEP_NOISE and pkg not in deps:
+                deps.append(pkg)
+        elif parts[0] == "EDGE" and len(parts) >= 3:
+            a, b = parts[1], parts[2]
+            if a in _DEP_NOISE or b in _DEP_NOISE or a == b:
+                continue
+            key = tuple(sorted((a, b)))   # arco non orientato
+            if key not in seen_edges:
+                seen_edges.add(key)
+                edges.append([a, b])
+    return deps, edges
+
+
+# Il nome canonico del prodotto spesso NON coincide col nome dell'eseguibile:
+# apache -> apache2/httpd, openssh -> sshd, postgresql -> postgres, ... Senza
+# questa mappa 'command -v apache' fallisce e non si rileva alcuna dipendenza.
+_PRODUCT_BINARIES = {
+    "apache": ["apache2", "apachectl", "httpd"],
+    "python": ["python3", "python"],
+    "openssh": ["sshd", "ssh"],
+    "postgresql": ["postgres", "psql"],
+    "mysql": ["mysqld", "mariadbd", "mysql"],
+    "redis": ["redis-server"],
+    "tomcat": ["java"],
+    "vsftpd": ["vsftpd"],
+    "exim": ["exim4", "exim"],
+}
+
+
+def _binary_candidates(product: str, binary: str) -> list:
+    """Nomi eseguibile da provare per un prodotto (override noti + il binario)."""
+    cands = list(_PRODUCT_BINARIES.get(product, []))
+    if binary and binary not in cands:
+        cands.append(binary)
+    return cands or [product]
+
+
+def _detect_runtime_deps(client, candidates):
+    """
+    Rileva via SSH (sessione gia' aperta) il grafo REALE del prodotto:
+    pacchetti delle librerie linkate (nodi) + archi inter-dipendenza diretti.
+    'candidates' e' la lista di nomi eseguibile da provare (es. apache2/httpd).
+    Best-effort: ([], []) se ldd/objdump/dpkg/rpm assenti o binario non risolto.
+    """
+    if not candidates:
+        return [], []
+    bins = " ".join(shlex.quote(c) for c in candidates)
+    cmd = _RUNTIME_DEPS_SH.replace("__BINS__", bins)
+    try:
+        _, stdout, _ = client.exec_command(cmd, timeout=_get_socket_timeout())
+        out = stdout.read().decode("utf-8", errors="replace")
+    except Exception:
+        return [], []
+    return _parse_runtime_deps(out)
+
+
 def _scan_auth_real(asset: Asset, target: TargetInfo) -> ScanResult:
     """
     Path autenticato REALE via SSH (paramiko). Attivo solo se SIMULATE_AUTH=False.
@@ -419,6 +576,9 @@ def _scan_auth_real(asset: Asset, target: TargetInfo) -> ScanResult:
         method = "auth-ssh"
 
     client = paramiko.SSHClient()
+    # Carica ~/.ssh/known_hosts: senza, il dizionario host-key e' vuoto e
+    # RejectPolicy rifiuta OGNI connessione (il path reale non funzionerebbe mai).
+    client.load_system_host_keys()
     client.set_missing_host_key_policy(paramiko.RejectPolicy())
     try:
         client.connect(
@@ -431,6 +591,25 @@ def _scan_auth_real(asset: Asset, target: TargetInfo) -> ScanResult:
         )
         _, stdout, _ = client.exec_command(cmd, timeout=_get_socket_timeout())
         out = stdout.read().decode("utf-8", errors="replace")
+
+        if is_windows:
+            found, version = _match_windows_product(product, out)
+        else:
+            found = _product_in_text(product, out)
+            if found and product == "python":
+                pm = _PYTHON_VERSION_RE.search(out)   # 'Python 3.9.2' da python3 --version
+                version = pm.group(1) if pm else _version_from_banner(out)
+            else:
+                version = _version_from_banner(out) if found else None
+
+        # Grafo dipendenze reali (solo Linux, solo se il prodotto e' presente):
+        # si riusa la stessa sessione SSH per non riautenticarsi. 'binary' e' il
+        # nome dell'eseguibile reale risolto sopra (es. python3 per Python).
+        deps: List[str] = []
+        dep_edges: List[List[str]] = []
+        if found and not is_windows:
+            deps, dep_edges = _detect_runtime_deps(
+                client, _binary_candidates(product, binary))
     except Exception as exc:
         return ScanResult(
             ip=asset.ip, auth_required=True, method=method,
@@ -440,21 +619,13 @@ def _scan_auth_real(asset: Asset, target: TargetInfo) -> ScanResult:
     finally:
         client.close()
 
-    if is_windows:
-        found, version = _match_windows_product(product, out)
-    else:
-        found = _product_in_text(product, out)
-        if found and product == "python":
-            pm = _PYTHON_VERSION_RE.search(out)   # 'Python 3.9.2' da python3 --version
-            version = pm.group(1) if pm else _version_from_banner(out)
-        else:
-            version = _version_from_banner(out) if found else None
-
     return ScanResult(
         ip=asset.ip, auth_required=True, method=method,
         product_found=found, detected_version=version,
         raw_evidence=out or "Nessun output.",
         vuln_match=_match_vuln(target, found, version),
+        dependencies=deps,
+        dep_edges=dep_edges,
     )
 
 

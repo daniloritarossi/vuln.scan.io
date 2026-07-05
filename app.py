@@ -18,6 +18,7 @@ Avvio:
 
 import json
 import socket
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -26,17 +27,20 @@ from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from assets import load_assets, save_assets, Asset
+from assets import (load_assets, get_asset, add_asset, update_asset,
+                    set_asset_enabled, delete_asset, Asset, AssetStoreError)
 from crypto import encrypt_password, is_encrypted, decrypt_password
 from config import load_config, save_config
 from osint import identify_product, extract_local
 from scanner import scan_asset, _get_simulate_auth as _simulate_auth, version_affected
 from cve import (query_osv, summarize_cves, query_osv_ids, extract_affected_version,
-                 query_osv_ecosystem, generate_remediation, generate_triage_report)
+                 query_osv_ecosystem, os_ecosystem, generate_remediation,
+                 generate_triage_report)
 from db import (persist_scan, persist_result, update_scan_summary, fetch_audit,
                 create_posture_run, persist_posture_asset, finalize_posture_run,
-                fetch_posture, fetch_posture_runs)
+                fetch_posture, fetch_posture_runs, fetch_posture_sbom)
 from posture import scan_asset_posture
+from sbom_export import sbom_rows, build_cyclonedx, build_spdx
 
 BASE_DIR = Path(__file__).parent
 ASSETS_FILE = BASE_DIR / "assets.txt"
@@ -74,26 +78,38 @@ def sbom_page(request: Request):
 
 
 @app.get("/api/sbom")
-def api_sbom():
+def api_sbom(run_id: int | None = None):
     """
-    Ritorna tutti i pacchetti rilevati dall'ultima run di postura (SCA).
-    Ogni riga: {asset_ip, package, version, ecosystem, cve_count}.
+    Inventario software COMPLETO dell'ultima run di postura (tutti i componenti,
+    non solo i vulnerabili). Ogni riga porta gli identificatori SBOM
+    (purl, cpe, licenza, fornitore, sha256, relazioni).
     """
-    run = fetch_posture()
+    run = fetch_posture_sbom(run_id)
     if not run:
         return {"rows": []}
-    rows = []
-    for asset in run.get("posture_assets") or []:
-        ip = asset.get("ip") or ""          # mai None: il filtro UI fa .toLowerCase()
-        for f in asset.get("posture_findings") or []:
-            rows.append({
-                "asset_ip":  ip,
-                "package":   f.get("package") or "",
-                "version":   f.get("version") or "",
-                "ecosystem": f.get("ecosystem") or "",
-                "cve_count": f.get("vuln_count", 0),
-            })
-    return {"rows": rows}
+    return {"rows": sbom_rows(run)}
+
+
+@app.get("/api/sbom/export")
+def api_sbom_export(format: str = "cyclonedx", run_id: int | None = None):
+    """
+    Esporta la SBOM in formato standard.
+    format: 'cyclonedx' (CycloneDX 1.5) | 'spdx' (SPDX 2.3).
+    Download come file JSON.
+    """
+    run = fetch_posture_sbom(run_id)
+    fmt = (format or "cyclonedx").lower()
+    if fmt == "spdx":
+        doc = build_spdx(run or {})
+        fname = "sbom.spdx.json"
+    elif fmt == "cyclonedx":
+        doc = build_cyclonedx(run or {})
+        fname = "sbom.cdx.json"
+    else:
+        return JSONResponse({"error": f"formato non supportato: {format}"}, status_code=400)
+    return JSONResponse(doc, headers={
+        "Content-Disposition": f'attachment; filename="{fname}"',
+    })
 
 
 @app.get("/intel", response_class=HTMLResponse)
@@ -182,9 +198,11 @@ def api_posture_scan(ips: str | None = None):
     def stream():
         try:
             assets = load_assets(ASSETS_FILE)
-        except FileNotFoundError as exc:
+        except AssetStoreError as exc:
             yield _sse("error", {"message": str(exc)})
             return
+        # Esclude gli asset disabilitati in inventario dalla scansione di postura.
+        assets = [a for a in assets if a.enabled]
         if selected:
             assets = [a for a in assets if a.ip in selected]
         if not assets:
@@ -268,13 +286,26 @@ def _normalize_host(raw: str) -> str:
 
 
 def _reachable(host: str, ports=(80, 443, 22, 8080), timeout: float = 1.5) -> bool:
-    """True se una connessione TCP riesce su almeno una delle porte note."""
-    for port in ports:
+    """True se una connessione TCP riesce su almeno una delle porte note.
+
+    Le porte sono sondate in parallelo: il tempo totale resta ~`timeout`
+    anche per host che filtrano/droppano i pacchetti, invece di sommare il
+    timeout di ogni porta in sequenza.
+    """
+    def _probe(port: int) -> bool:
         try:
             with socket.create_connection((host, port), timeout=timeout):
                 return True
         except Exception:
-            continue
+            return False
+
+    with ThreadPoolExecutor(max_workers=len(ports)) as pool:
+        futures = [pool.submit(_probe, p) for p in ports]
+        for fut in as_completed(futures):
+            if fut.result():
+                for f in futures:
+                    f.cancel()
+                return True
     return False
 
 
@@ -318,27 +349,30 @@ def api_asset_health(host: str, index: int | None = None):
 
     if reachable and index is not None:
         try:
-            assets = load_assets(ASSETS_FILE)
-        except FileNotFoundError:
-            assets = []
-        if 0 <= index < len(assets):
-            asset = assets[index]
-            if asset.auth_required:
-                if is_encrypted(asset.password):
-                    ssh_ok = _check_ssh(asset)
-                else:
-                    ssh_ok = False  # password in chiaro: login rifiutato
+            asset = get_asset(index, ASSETS_FILE)  # 'index' = id riga Supabase
+        except AssetStoreError:
+            asset = None
+        if asset and asset.auth_required:
+            if is_encrypted(asset.password):
+                ssh_ok = _check_ssh(asset)
+            else:
+                ssh_ok = False  # password in chiaro: login rifiutato
 
     return {"host": host, "reachable": reachable, "ssh_ok": ssh_ok}
 
 
 @app.get("/api/cve")
-def api_cve(product: str, version: str | None = None):
+def api_cve(product: str, version: str | None = None,
+            os_type: str | None = None, os_major_version: str | None = None):
     """
     Lista COMPLETA di id CVE (OSV) per (prodotto, versione).
     Usato dal 'show more' della pagina Audit per espandere oltre i 10 salvati.
+
+    L'ecosistema OSV (richiesto dall'API) e' dedotto dal SO se fornito,
+    altrimenti default Debian.
     """
-    return query_osv_ids(product, version)
+    eco = os_ecosystem(os_type, os_major_version) or "Debian"
+    return query_osv_ids(product, version, ecosystem=eco)
 
 
 @app.get("/api/assets")
@@ -346,15 +380,18 @@ def api_assets():
     """Ritorna l'inventario interpretato (senza password)."""
     try:
         assets = load_assets(ASSETS_FILE)
-    except FileNotFoundError as exc:
-        return JSONResponse({"error": str(exc)}, status_code=404)
+    except AssetStoreError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=503)
     return {"assets": [a.to_dict() for a in assets]}
 
 
-def _asset_full(index: int, a: Asset) -> dict:
-    """Serializzazione per la pagina CRUD. La password non viene mai esposta."""
+def _asset_full(a: Asset) -> dict:
+    """Serializzazione per la pagina CRUD. La password non viene mai esposta.
+
+    'index' = id riga Supabase (nome mantenuto per compatibilita' frontend).
+    """
     return {
-        "index": index,
+        "index": a.id,
         "ip": a.ip,
         "username": a.username,
         "has_password": bool(a.password),
@@ -362,6 +399,7 @@ def _asset_full(index: int, a: Asset) -> dict:
         "auth_required": a.auth_required,
         "os_type": a.os_type,
         "os_major_version": a.os_major_version,
+        "enabled": a.enabled,
     }
 
 
@@ -370,9 +408,9 @@ def api_assets_all():
     """Inventario completo (password inclusa) per la gestione CRUD."""
     try:
         assets = load_assets(ASSETS_FILE)
-    except FileNotFoundError:
-        assets = []
-    return {"assets": [_asset_full(i, a) for i, a in enumerate(assets)]}
+    except AssetStoreError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=503)
+    return {"assets": [_asset_full(a) for a in assets]}
 
 
 @app.post("/api/assets")
@@ -382,38 +420,42 @@ async def api_assets_create(request: Request):
     ip = (body.get("ip") or "").strip()
     if not ip:
         return JSONResponse({"error": "Missing IP"}, status_code=400)
-    try:
-        assets = load_assets(ASSETS_FILE)
-    except FileNotFoundError:
-        assets = []
+    os_type = (body.get("os_type") or "").strip().lower()
+    if os_type not in ("linux", "windows"):
+        return JSONResponse({"error": "OS type required (linux or windows)"}, status_code=400)
     plain_pw = (body.get("password") or "").strip()
     try:
         stored_pw = encrypt_password(plain_pw) if plain_pw else ""
     except RuntimeError as exc:
         return JSONResponse({"error": str(exc)}, status_code=500)
-    assets.append(Asset(
+    new_id = add_asset(Asset(
         ip=ip,
         username=(body.get("username") or "").strip(),
         password=stored_pw,
-        os_type=(body.get("os_type") or "").strip().lower(),
+        os_type=os_type,
         os_major_version=(body.get("os_major_version") or "").strip(),
+        enabled=bool(body.get("enabled", True)),
     ))
-    save_assets(assets, ASSETS_FILE)
-    return {"ok": True, "index": len(assets) - 1}
+    if new_id is None:
+        return JSONResponse({"error": "Supabase non raggiungibile"}, status_code=503)
+    return {"ok": True, "index": new_id}
 
 
 @app.put("/api/assets/{index}")
 async def api_assets_update(index: int, request: Request):
-    """Aggiorna l'asset all'indice indicato. Body: {ip, username, password}."""
+    """Aggiorna l'asset indicato (index = id Supabase). Body: {ip, username, password}."""
     body = await request.json()
     ip = (body.get("ip") or "").strip()
     if not ip:
         return JSONResponse({"error": "Missing IP"}, status_code=400)
+    os_type = (body.get("os_type") or "").strip().lower()
+    if os_type not in ("linux", "windows"):
+        return JSONResponse({"error": "OS type required (linux or windows)"}, status_code=400)
     try:
-        assets = load_assets(ASSETS_FILE)
-    except FileNotFoundError:
-        assets = []
-    if index < 0 or index >= len(assets):
+        current = get_asset(index, ASSETS_FILE)
+    except AssetStoreError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=503)
+    if current is None:
         return JSONResponse({"error": "Invalid index"}, status_code=404)
     plain_pw = (body.get("password") or "").strip()
     if plain_pw:
@@ -422,29 +464,38 @@ async def api_assets_update(index: int, request: Request):
         except RuntimeError as exc:
             return JSONResponse({"error": str(exc)}, status_code=500)
     else:
-        stored_pw = assets[index].password  # mantiene password cifrata esistente
-    assets[index] = Asset(
+        stored_pw = current.password  # mantiene password cifrata esistente
+    # 'enabled' opzionale: se assente, preserva lo stato corrente.
+    enabled = body.get("enabled")
+    enabled = current.enabled if enabled is None else bool(enabled)
+    ok = update_asset(index, Asset(
         ip=ip,
         username=(body.get("username") or "").strip(),
         password=stored_pw,
-        os_type=(body.get("os_type") or "").strip().lower(),
+        os_type=os_type,
         os_major_version=(body.get("os_major_version") or "").strip(),
-    )
-    save_assets(assets, ASSETS_FILE)
+        enabled=enabled,
+    ))
+    if not ok:
+        return JSONResponse({"error": "Supabase non raggiungibile"}, status_code=503)
     return {"ok": True}
+
+
+@app.patch("/api/assets/{index}/enabled")
+async def api_assets_toggle(index: int, request: Request):
+    """Abilita/disabilita un asset per le scansioni. Body: {enabled: bool}."""
+    body = await request.json()
+    enabled = bool(body.get("enabled", True))
+    if not set_asset_enabled(index, enabled):
+        return JSONResponse({"error": "Invalid index"}, status_code=404)
+    return {"ok": True, "enabled": enabled}
 
 
 @app.delete("/api/assets/{index}")
 def api_assets_delete(index: int):
-    """Elimina l'asset all'indice indicato."""
-    try:
-        assets = load_assets(ASSETS_FILE)
-    except FileNotFoundError:
-        assets = []
-    if index < 0 or index >= len(assets):
+    """Elimina l'asset indicato (index = id Supabase)."""
+    if not delete_asset(index):
         return JSONResponse({"error": "Invalid index"}, status_code=404)
-    assets.pop(index)
-    save_assets(assets, ASSETS_FILE)
     return {"ok": True}
 
 
@@ -496,9 +547,11 @@ def api_scan(description: str, use_osint: bool = True, lang: str = "en",
         # 2. Caricamento inventario.
         try:
             assets = load_assets(ASSETS_FILE)
-        except FileNotFoundError as exc:
+        except AssetStoreError as exc:
             yield _sse("error", {"message": str(exc)})
             return
+        # Esclude gli asset disabilitati in inventario dalla scansione.
+        assets = [a for a in assets if a.enabled]
 
         # 2b. ADVISORY AI: se il prodotto e' noto ma l'input NON contiene una
         #     versione (vulnerabilita' generica senza CVE), chiedo all'LLM di
@@ -531,18 +584,32 @@ def api_scan(description: str, use_osint: bool = True, lang: str = "en",
         ai_remediation = bool(load_config()["ai"].get("ai_remediation", False))
         all_results: list[dict] = []
         summary_version = None
+        summary_eco = None
         for asset in assets:
             result = scan_asset(asset, target, deep=deep)
             rd = result.to_dict()
             rd["affected_version"] = None
             rd["match_basis"] = "none"
-            if rd["product_found"] and rd["detected_version"]:
-                info = query_osv(target.product, rd["detected_version"])
+            # Ecosistema OSV dedotto dal SO dell'asset (OSV richiede sempre
+            # package.ecosystem; senza, la query e' rifiutata con 400).
+            eco = os_ecosystem(asset.os_type, asset.os_major_version)
+            # La query OSV e' a livello prodotto+ecosistema (la versione upstream
+            # non e' usata: gli ecosistemi distro usano stringhe native). Percio'
+            # basta che il prodotto sia PRESENTE: cosi' la colonna CVE si popola
+            # anche per asset senza versione rilevata (es. auth simulato).
+            if rd["product_found"]:
+                # Fallback Debian se l'ecosistema non e' deducibile: mantiene la
+                # colonna CVE per-asset coerente col conteggio di sintesi (che usa
+                # lo stesso fallback), evitando header 304 e righe vuote.
+                asset_eco = eco or "Debian"
+                info = query_osv(target.product, rd["detected_version"], ecosystem=asset_eco)
                 rd["cve_count"] = info["count"]
                 rd["cve_ids"] = info["ids"]
                 rd["cve_error"] = info["error"]
-                if summary_version is None:
+                if summary_version is None and rd["detected_version"]:
                     summary_version = rd["detected_version"]
+                if summary_eco is None:
+                    summary_eco = asset_eco
                 # Verdetto advisory AI (vulnerabilita' senza CVE): sovrascrive
                 # vuln_match confrontando la versione installata col range affetto.
                 if advisory_expr:
@@ -573,9 +640,39 @@ def api_scan(description: str, use_osint: bool = True, lang: str = "en",
             persist_result(scan_id, rd)
             yield _sse("result", rd)
 
+        # 3b. Grafo dipendenze REALI: unione delle dipendenze runtime rilevate
+        #     (ldd -> pacchetto) su tutti gli asset dove il prodotto e' presente.
+        #     Nessuna tabella di assunzioni: solo cio' che e' linkato sui target.
+        runtime_deps = sorted({
+            d for r in all_results for d in (r.get("dependencies") or [])
+        })
+        contributing = sum(1 for r in all_results if r.get("dependencies"))
+        # Archi inter-dipendenza reali: unione deduplicata (non orientata), con
+        # entrambi gli estremi fra le dipendenze risolte.
+        _dep_set = set(runtime_deps)
+        _seen_edges: set = set()
+        runtime_edges: list[list[str]] = []
+        for r in all_results:
+            for a, b in (r.get("dep_edges") or []):
+                if a not in _dep_set or b not in _dep_set or a == b:
+                    continue
+                key = tuple(sorted((a, b)))
+                if key not in _seen_edges:
+                    _seen_edges.add(key)
+                    runtime_edges.append([a, b])
+        yield _sse("deps", {
+            "product": target.product,
+            "dependencies": runtime_deps,
+            "edges": runtime_edges,
+            "source": "runtime-ldd",
+            "asset_count": contributing,
+        })
+
         # 4. Sintesi CVE (OSV per il conteggio ufficiale + LLM locale per il testo).
         ver = summary_version or target.version
-        osv = query_osv(target.product, ver)
+        # Ecosistema: quello dell'asset che ha fornito la versione di sintesi;
+        # fallback Debian (copertura OS-package piu' ampia in OSV) se ignoto.
+        osv = query_osv(target.product, ver, ecosystem=summary_eco or "Debian")
         if osv["ids"]:
             yield _sse("ai_call", {**_ai_tag(), "purpose": "summary"})
             yield ": keepalive\n\n"

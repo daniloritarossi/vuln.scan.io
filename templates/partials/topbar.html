@@ -1,0 +1,42 @@
+{# Shared top app bar.
+   Expects one of:
+     - crumbs: breadcrumb [{key, text, href?}] — last item = current page
+     - top_tag_key, top_tag_text: legacy single chip (e.g. status on dashboard) #}
+<!-- TopAppBar -->
+<header
+  class="fixed top-0 w-full z-50 bg-white/80 backdrop-blur-xl border-b border-slate-200/50 flex justify-between items-center px-margin-desktop h-16 transition-all">
+  <div class="flex items-center gap-4">
+    <img src="/static/logo-icon-animated.svg" class="w-11 h-11" alt="VULN.SCAN.IO" />
+    <h1 class="font-headline-md text-headline-md font-bold tracking-tight"><span class="text-orange-500">VULN</span><span class="text-slate-400">.</span><span class="text-orange-500">SCAN</span><span class="text-slate-400">.</span><span class="text-cyan-500">IO</span></h1>
+    {% if crumbs is defined %}
+    <nav aria-label="breadcrumb"
+      class="ml-4 hidden md:flex items-center gap-1.5 px-2.5 py-1 bg-cyan-50 rounded-full border border-cyan-100/50">
+      {% for c in crumbs %}
+      {% if not loop.last %}
+      <a href="{{ c.href }}"
+        class="font-label-caps text-label-caps text-slate-400 tracking-[0.2em] hover:text-cyan-600 transition-colors"
+        data-i18n="{{ c.key }}">{{ c.text }}</a>
+      <span class="material-symbols-outlined text-[13px] text-cyan-300 leading-none select-none"
+        aria-hidden="true">chevron_right</span>
+      {% else %}
+      <span class="font-label-caps text-label-caps text-cyan-600 tracking-[0.2em]" aria-current="page"
+        data-i18n="{{ c.key }}">{{ c.text }}</span>
+      {% endif %}
+      {% endfor %}
+    </nav>
+    {% else %}
+    <span
+      class="font-label-caps text-label-caps text-cyan-600 tracking-[0.2em] ml-4 hidden md:block px-2.5 py-1 bg-cyan-50 rounded-full border border-cyan-100/50"
+      data-i18n="{{ top_tag_key }}">{{ top_tag_text }}</span>
+    {% endif %}
+  </div>
+  <div class="flex items-center gap-3">
+    <div class="flex items-center gap-1 bg-slate-100 rounded-lg p-0.5">
+      <button data-lang-btn="en" class="px-2 py-1 rounded-md font-label-caps text-[10px] transition-colors">EN</button>
+      <button data-lang-btn="it" class="px-2 py-1 rounded-md font-label-caps text-[10px] transition-colors">IT</button>
+    </div>
+    <div class="text-slate-500 hover:text-cyan-600 hover:glow-sm transition-all duration-150 cursor-pointer">
+      <span class="material-symbols-outlined">sensors</span>
+    </div>
+  </div>
+</header>

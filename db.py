@@ -165,6 +165,80 @@ def update_scan_summary(scan_id: Optional[int], cve: dict) -> None:
 
 
 # ---------------------------------------------------------------------------
+# INVENTARIO ASSET (tabella 'assets', sostituisce assets.txt)
+# ---------------------------------------------------------------------------
+
+def fetch_assets():
+    """
+    Legge l'inventario asset ordinato per id.
+    Ritorna la lista di righe (eventualmente vuota) oppure None se il DB
+    non e' raggiungibile.
+    """
+    client = _get_client()
+    if client is None:
+        return None
+    try:
+        resp = client.table("assets").select("*").order("id").execute()
+        return resp.data or []
+    except Exception as exc:
+        logger.warning("fetch_assets fallita: %s", exc)
+        return None
+
+
+def insert_asset(row: dict) -> Optional[int]:
+    """Inserisce un asset e ritorna il suo id, None in caso di errore."""
+    client = _get_client()
+    if client is None:
+        return None
+    try:
+        resp = client.table("assets").insert(row).execute()
+        return resp.data[0]["id"] if resp.data else None
+    except Exception as exc:
+        logger.warning("insert_asset fallita (ip=%s): %s", row.get("ip"), exc)
+        return None
+
+
+def insert_assets(rows: list) -> bool:
+    """Inserimento bulk (migrazione da assets.txt). True se riuscito."""
+    client = _get_client()
+    if client is None or not rows:
+        return False
+    try:
+        client.table("assets").insert(rows).execute()
+        return True
+    except Exception as exc:
+        logger.warning("insert_assets fallita: %s", exc)
+        return False
+
+
+def update_asset(asset_id: int, row: dict) -> bool:
+    """Aggiorna l'asset indicato. True se la riga esiste ed e' stata aggiornata."""
+    client = _get_client()
+    if client is None:
+        return False
+    try:
+        row = {**row, "updated_at": "now()"}
+        resp = client.table("assets").update(row).eq("id", asset_id).execute()
+        return bool(resp.data)
+    except Exception as exc:
+        logger.warning("update_asset fallita (id=%s): %s", asset_id, exc)
+        return False
+
+
+def delete_asset(asset_id: int) -> bool:
+    """Elimina l'asset indicato. True se la riga esisteva."""
+    client = _get_client()
+    if client is None:
+        return False
+    try:
+        resp = client.table("assets").delete().eq("id", asset_id).execute()
+        return bool(resp.data)
+    except Exception as exc:
+        logger.warning("delete_asset fallita (id=%s): %s", asset_id, exc)
+        return False
+
+
+# ---------------------------------------------------------------------------
 # FULL POSTURE (SCA)
 # ---------------------------------------------------------------------------
 
@@ -203,6 +277,18 @@ def persist_posture_asset(run_id: Optional[int], report: dict) -> None:
                 "vuln_count": f["vuln_count"], "max_severity": f["max_severity"],
                 "cve_ids": f["cve_ids"] or [],
             } for f in findings]).execute()
+        # Inventario COMPLETO (SBOM): tutti i componenti, non solo i vulnerabili.
+        components = report.get("components") or []
+        if asset_id and components:
+            client.table("posture_components").insert([{
+                "asset_id": asset_id,
+                "package": c["package"], "version": c["version"],
+                "ecosystem": c["ecosystem"], "category": c["category"],
+                "purl": c["purl"], "cpe": c["cpe"], "license": c["license"],
+                "supplier": c["supplier"], "sha256": c["sha256"],
+                "vuln_count": c["vuln_count"], "max_severity": c["max_severity"],
+                "cve_ids": c["cve_ids"] or [], "depends_on": c["depends_on"] or [],
+            } for c in components]).execute()
     except Exception as exc:
         logger.warning("persist_posture_asset fallita (ip=%s): %s", report.get("ip"), exc)
 
@@ -243,6 +329,30 @@ def fetch_posture(run_id: Optional[int] = None):
         return (resp.data[0] if resp.data else {})
     except Exception as exc:
         logger.warning("fetch_posture fallita: %s", exc)
+        return None
+
+
+def fetch_posture_sbom(run_id: Optional[int] = None):
+    """
+    Ritorna una run con l'inventario COMPLETO per asset (posture_components) —
+    sorgente della SBOM. run_id None => ultima run. None se DB non raggiungibile,
+    {} se nessuna run.
+    """
+    client = _get_client()
+    if client is None:
+        return None
+    try:
+        q = client.table("posture_runs").select(
+            "id, created_at, "
+            "posture_assets(ip, os_type, os_guess, os_major_version, posture_components(*))")
+        if run_id is not None:
+            q = q.eq("id", run_id)
+        else:
+            q = q.order("created_at", desc=True).limit(1)
+        resp = q.execute()
+        return (resp.data[0] if resp.data else {})
+    except Exception as exc:
+        logger.warning("fetch_posture_sbom fallita: %s", exc)
         return None
 
 

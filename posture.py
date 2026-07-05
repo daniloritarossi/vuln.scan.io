@@ -17,11 +17,105 @@ Nessuna dipendenza nuova: usa 'requests' (gia' presente) verso OSV.
 
 import hashlib
 import re
+from urllib.parse import quote
+
 import requests
 
+from crypto import decrypt_password
+from osint import PRODUCT_DEPENDENCIES
 from scanner import _get_simulate_auth as _sim_auth, _get_socket_timeout as _sock_timeout
 
 OSV_BATCH_URL = "https://api.osv.dev/v1/querybatch"
+
+# --- SBOM enrichment ------------------------------------------------------
+# Metadati per una SBOM conforme (CycloneDX/SPDX): identificatori standard
+# (PURL/CPE), licenza, fornitore, checksum, relazioni di dipendenza.
+
+# purl "type" per ecosistema (spec Package-URL). Windows -> generic.
+_PURL_TYPE = {
+    "Debian": ("deb", "debian"), "PyPI": ("pypi", None), "npm": ("npm", None),
+    "Maven": ("maven", None), "Windows": ("generic", None),
+}
+
+# Licenza SPDX per pacchetto noto (lowercase). Default: NOASSERTION.
+_LICENSE = {
+    "openssl": "Apache-2.0", "bash": "GPL-3.0-or-later", "sudo": "ISC",
+    "openssh": "BSD-3-Clause", "glibc": "LGPL-2.1-or-later", "nginx": "BSD-2-Clause",
+    "apache2": "Apache-2.0", "curl": "curl", "samba": "GPL-3.0-or-later",
+    "wget": "GPL-3.0-or-later", "vim": "Vim", "zlib": "Zlib",
+    "log4j-core": "Apache-2.0", "django": "BSD-3-Clause", "flask": "BSD-3-Clause",
+    "requests": "Apache-2.0", "lodash": "MIT", "jquery": "MIT",
+    "systemd": "LGPL-2.1-or-later", "coreutils": "GPL-3.0-or-later",
+    "ca-certificates": "MPL-2.0", "tzdata": "LicenseRef-public-domain", "grep": "GPL-3.0-or-later",
+    "notepad++": "GPL-3.0-only", "putty": "MIT", "7-zip": "LGPL-2.1-only",
+    "mozilla firefox": "MPL-2.0", "adobe acrobat reader dc": "LicenseRef-Proprietary",
+    "vlc media player": "GPL-2.0-or-later", "wireshark": "GPL-2.0-or-later",
+    "microsoft edge": "LicenseRef-Proprietary",
+    "microsoft visual c++ redistributable": "LicenseRef-Proprietary",
+    "microsoft defender": "LicenseRef-Proprietary",
+}
+
+# Fornitore per pacchetto noto (lowercase). Fallback: per ecosistema.
+_SUPPLIER = {
+    "openssh": "OpenBSD", "apache2": "Apache Software Foundation",
+    "log4j-core": "Apache Software Foundation", "django": "Django Software Foundation",
+    "flask": "Pallets", "requests": "Python Software Foundation", "jquery": "OpenJS Foundation",
+    "coreutils": "GNU Project", "grep": "GNU Project", "systemd": "systemd Project",
+    "notepad++": "Notepad++ Team", "putty": "Simon Tatham", "7-zip": "Igor Pavlov",
+    "mozilla firefox": "Mozilla", "adobe acrobat reader dc": "Adobe",
+    "vlc media player": "VideoLAN", "wireshark": "Wireshark Foundation",
+    "microsoft edge": "Microsoft", "microsoft visual c++ redistributable": "Microsoft",
+    "microsoft defender": "Microsoft",
+}
+_SUPPLIER_BY_ECO = {
+    "Debian": "Debian Project", "PyPI": "Python Package Index",
+    "npm": "npm, Inc.", "Maven": "Maven Central", "Windows": "NOASSERTION",
+}
+
+
+def _slug(s: str) -> str:
+    """Token CPE-safe: minuscolo, non-alnum -> underscore."""
+    return re.sub(r"[^a-z0-9]+", "_", (s or "").lower()).strip("_") or "unknown"
+
+
+def _purl(name: str, version: str, ecosystem: str) -> str:
+    """Package URL (spec purl). Nome url-encoded; namespace per ecosistema."""
+    typ, namespace = _PURL_TYPE.get(ecosystem, ("generic", None))
+    enc = quote(name, safe="")
+    ns = f"{namespace}/" if namespace else ""
+    ver = f"@{quote(version, safe='')}" if version else ""
+    return f"pkg:{typ}/{ns}{enc}{ver}"
+
+
+def _cpe(name: str, version: str) -> str:
+    """CPE 2.3 best-effort (vendor==product dallo slug del nome)."""
+    p = _slug(name)
+    v = version or "*"
+    return f"cpe:2.3:a:{p}:{p}:{v}:*:*:*:*:*:*:*"
+
+
+def _component_hash(name: str, version: str, ecosystem: str) -> str:
+    """SHA-256 delle coordinate (identita' deterministica del componente).
+    NON e' l'hash dell'artefatto: la raccolta simulata/dpkg non fornisce il
+    binario. Serve come identificatore content-addressable stabile in SBOM."""
+    return hashlib.sha256(f"{ecosystem}|{name}|{version}".encode()).hexdigest()
+
+
+def _license_for(name: str) -> str:
+    return _LICENSE.get((name or "").lower(), "NOASSERTION")
+
+
+def _supplier_for(name: str, ecosystem: str) -> str:
+    return _SUPPLIER.get((name or "").lower(), _SUPPLIER_BY_ECO.get(ecosystem, "NOASSERTION"))
+
+
+def _depends_on(name: str, inv_names: set) -> list:
+    """Dipendenze note del pacchetto presenti nello stesso inventario asset.
+    Relazioni reali dal catalogo PRODUCT_DEPENDENCIES (osint), non presunte."""
+    low = (name or "").lower()
+    canon = re.sub(r"\d+$", "", low)               # apache2 -> apache
+    deps = PRODUCT_DEPENDENCIES.get(low) or PRODUCT_DEPENDENCIES.get(canon) or []
+    return [d for d in deps if d in inv_names]
 
 # Pesi per il calcolo dello score (piu' alta la severita', piu' pesa).
 SEV_WEIGHT = {"CRITICAL": 1.0, "HIGH": 0.7, "MEDIUM": 0.4, "LOW": 0.2, "UNKNOWN": 0.5}
@@ -43,6 +137,8 @@ CATALOG = [
      "severity": "HIGH", "cves": ["CVE-2015-7547"]},
     {"name": "nginx", "version": "1.10.0", "ecosystem": "Debian", "category": "Web",
      "severity": "HIGH", "cves": ["CVE-2017-7529"]},
+    {"name": "apache2", "version": "2.4.49", "ecosystem": "Debian", "category": "Web",
+     "severity": "CRITICAL", "cves": ["CVE-2021-41773", "CVE-2021-42013"]},
     {"name": "curl", "version": "7.47.0", "ecosystem": "Debian", "category": "Network",
      "severity": "MEDIUM", "cves": ["CVE-2016-8624"]},
     {"name": "samba", "version": "4.3.11", "ecosystem": "Debian", "category": "Network",
@@ -174,10 +270,14 @@ def _ssh_inventory_windows(asset):
     import paramiko
     from scanner import _WINDOWS_INVENTORY_CMD
     client = paramiko.SSHClient()
+    # Carica ~/.ssh/known_hosts: senza, RejectPolicy rifiuta ogni host (il path
+    # reale non partirebbe mai). Coerente con scanner._scan_auth_real.
+    client.load_system_host_keys()
     client.set_missing_host_key_policy(paramiko.RejectPolicy())
     try:
         _t = _sock_timeout()
-        client.connect(asset.ip, username=asset.username, password=asset.password,
+        client.connect(asset.ip, username=asset.username,
+                       password=decrypt_password(asset.password),
                        timeout=_t, allow_agent=False, look_for_keys=False)
         _, stdout, _ = client.exec_command(_WINDOWS_INVENTORY_CMD, timeout=_t * 6)
         out = stdout.read().decode("utf-8", errors="replace")
@@ -194,10 +294,14 @@ def _ssh_inventory(asset):
         "echo '---PIP---'; pip3 list --format=freeze 2>/dev/null)"
     )
     client = paramiko.SSHClient()
+    # Carica ~/.ssh/known_hosts: senza, RejectPolicy rifiuta ogni host (il path
+    # reale non partirebbe mai). Coerente con scanner._scan_auth_real.
+    client.load_system_host_keys()
     client.set_missing_host_key_policy(paramiko.RejectPolicy())
     try:
         _t = _sock_timeout()
-        client.connect(asset.ip, username=asset.username, password=asset.password,
+        client.connect(asset.ip, username=asset.username,
+                       password=decrypt_password(asset.password),
                        timeout=_t, allow_agent=False, look_for_keys=False)
         _, stdout, _ = client.exec_command(cmd, timeout=_t * 4)
         out = stdout.read().decode("utf-8", errors="replace")
@@ -271,28 +375,55 @@ def assess_posture(asset_ip: str, os_guess: str, inventory: list, method: str) -
     catalogo (demo) o 'UNKNOWN' per pacchetti reali senza hint.
     """
     osv = _osv_batch(inventory)
-    findings = []
+    findings = []       # solo pacchetti vulnerabili (alimenta i grafici di postura)
+    components = []     # inventario COMPLETO arricchito (alimenta la SBOM)
     sev_counts = {s: 0 for s in SEV_ORDER}
     total_vulns = 0
     weighted = 0.0
+
+    # Nomi presenti nell'inventario: per risolvere le relazioni di dipendenza
+    # solo verso componenti effettivamente installati sullo stesso asset.
+    inv_names = {(p.get("name") or "").lower() for p in inventory}
 
     for i, pkg in enumerate(inventory):
         r = osv.get(i, {})
         ids = r.get("ids") or pkg.get("cves") or []
         count = r.get("count") or len(pkg.get("cves") or [])
-        if not ids and not count:
-            continue  # pacchetto pulito
+        vulnerable_pkg = bool(ids or count)
+
         sev = (pkg.get("severity") or "UNKNOWN").upper()
         if sev not in SEV_WEIGHT:
             sev = "UNKNOWN"
+
+        name, version, eco = pkg["name"], pkg["version"], pkg["ecosystem"]
+        # Componente SBOM: SEMPRE incluso (anche i pacchetti puliti), con
+        # identificatori standard e metadati per CycloneDX/SPDX.
+        components.append({
+            "package": name,
+            "version": version,
+            "ecosystem": eco,
+            "category": pkg.get("category") or eco,
+            "purl": _purl(name, version, eco),
+            "cpe": _cpe(name, version),
+            "license": _license_for(name),
+            "supplier": _supplier_for(name, eco),
+            "sha256": _component_hash(name, version, eco),
+            "vuln_count": count if vulnerable_pkg else 0,
+            "max_severity": sev if vulnerable_pkg else "NONE",
+            "cve_ids": ids[:25],
+            "depends_on": _depends_on(name, inv_names),
+        })
+
+        if not vulnerable_pkg:
+            continue  # pacchetto pulito: non entra nei finding di postura
         sev_counts[sev] += 1
         total_vulns += count
         weighted += SEV_WEIGHT[sev]
         findings.append({
-            "package": pkg["name"],
-            "version": pkg["version"],
-            "ecosystem": pkg["ecosystem"],
-            "category": pkg.get("category") or pkg["ecosystem"],
+            "package": name,
+            "version": version,
+            "ecosystem": eco,
+            "category": pkg.get("category") or eco,
             "vuln_count": count,
             "max_severity": sev,
             "cve_ids": ids[:25],
@@ -318,6 +449,7 @@ def assess_posture(asset_ip: str, os_guess: str, inventory: list, method: str) -
         "sev_low": sev_counts["LOW"],
         "sev_unknown": sev_counts["UNKNOWN"],
         "findings": findings,
+        "components": components,
     }
 
 

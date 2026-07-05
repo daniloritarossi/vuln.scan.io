@@ -8,7 +8,7 @@
   "ai": {
     "provider": "ollama",
     "ollama_url": "http://localhost:11434/api/generate",
-    "ollama_model": "qwen2.5:7b",
+    "ollama_model": "glm4:9b",
     "claude_api_key": "",
     "claude_model": "claude-haiku-4-5-20251001",
     "summary_timeout": 60,
@@ -19,7 +19,7 @@
     "ai_remediation": false
   },
   "scanner": {
-    "simulate_auth": true,
+    "simulate_auth": false,
     "socket_timeout": 4
   },
   "osv": {

@@ -9,8 +9,8 @@
   <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
-  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="/static/vendor/tailwind.js"></script>
+  <script src="/static/vendor/xlsx.full.min.js"></script>
   <script id="tailwind-config">
     tailwind.config = {
       darkMode: "class",
@@ -41,7 +41,7 @@
     ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
     body { min-height: max(884px, 100dvh); }
   </style>
-  <script src="/static/i18n.js"></script>
+  <script src="/static/i18n.js?v=9"></script>
 </head>
 <body class="bg-white text-on-background font-body-md text-body-md relative antialiased overflow-x-hidden">
   <div class="shader-bg">
@@ -66,63 +66,15 @@
     </script>
   </div>
 
-  <!-- TopAppBar -->
-  <header class="fixed top-0 w-full z-50 bg-white/80 backdrop-blur-xl border-b border-slate-200/50 flex justify-between items-center px-margin-desktop h-16 transition-all">
-    <div class="flex items-center gap-4">
-      <img src="/static/logo-icon.svg" class="w-11 h-11" alt="VULN.SCAN.IO" />
-      <h1 class="font-headline-md text-headline-md font-bold tracking-tight">
-        <span class="text-orange-500">VULN</span><span class="text-slate-400">.</span><span class="text-orange-500">SCAN</span><span class="text-slate-400">.</span><span class="text-cyan-500">IO</span>
-      </h1>
-      <span class="font-label-caps text-label-caps text-cyan-600 tracking-[0.2em] ml-4 hidden md:block px-2.5 py-1 bg-cyan-50 rounded-full border border-cyan-100/50">SBOM</span>
-    </div>
-    <div class="flex items-center gap-3">
-      <div class="flex items-center gap-1 bg-slate-100 rounded-lg p-0.5">
-        <button data-lang-btn="en" class="px-2 py-1 rounded-md font-label-caps text-[10px] transition-colors">EN</button>
-        <button data-lang-btn="it" class="px-2 py-1 rounded-md font-label-caps text-[10px] transition-colors">IT</button>
-      </div>
-    </div>
-  </header>
+{% set active_page = 'sbom' %}
+{% set crumbs = [
+  {'key': 'crumb.home', 'text': 'Home', 'href': '/'},
+  {'key': 'sbom.tag', 'text': 'SBOM'}
+] %}
+  {% include 'partials/topbar.html' %}
 
   <div class="flex pt-16 h-screen w-full overflow-hidden">
-    <!-- NavigationDrawer -->
-    <nav class="hidden md:flex flex-col py-panel-padding gap-base-unit fixed left-0 top-16 h-[calc(100vh-64px)] w-64 bg-white/40 backdrop-blur-xl border-r border-slate-200/50 z-40">
-      <div class="px-6 mb-4">
-        <span class="font-label-caps text-label-caps text-slate-400 tracking-[0.2em]">CORE_NAV</span>
-      </div>
-      <ul class="flex flex-col w-full px-4 gap-2">
-        <li>
-          <a class="flex items-center gap-3 px-4 py-3 text-slate-600 hover:text-slate-900 hover:bg-white/60 rounded-xl transition-all font-label-caps text-label-caps" href="/">
-            <span class="material-symbols-outlined">dashboard</span><span>DASHBOARD</span>
-          </a>
-        </li>
-        <li>
-          <a class="flex items-center gap-3 px-4 py-3 text-slate-600 hover:text-slate-900 hover:bg-white/60 rounded-xl transition-all font-label-caps text-label-caps" href="/assets">
-            <span class="material-symbols-outlined">inventory_2</span><span>ASSETS</span>
-          </a>
-        </li>
-        <li>
-          <a class="flex items-center gap-3 px-4 py-3 text-slate-600 hover:text-slate-900 hover:bg-white/60 rounded-xl transition-all font-label-caps text-label-caps" href="/intel">
-            <span class="material-symbols-outlined">psychology</span><span>SECURITY POSTURE</span>
-          </a>
-        </li>
-        <li>
-          <a class="flex items-center gap-3 px-4 py-3 text-slate-600 hover:text-slate-900 hover:bg-white/60 rounded-xl transition-all font-label-caps text-label-caps" href="/audit">
-            <span class="material-symbols-outlined">fact_check</span><span>AUDIT</span>
-          </a>
-        </li>
-        <!-- Active: SBOM -->
-        <li>
-          <a class="flex items-center gap-3 px-4 py-3 text-white bg-slate-900 rounded-xl font-label-caps text-label-caps shadow-lg shadow-slate-900/10 transition-transform hover:scale-[1.02]" href="/sbom">
-            <span class="material-symbols-outlined text-cyan-400">receipt_long</span><span>SBOM</span>
-          </a>
-        </li>
-        <li>
-          <a class="flex items-center gap-3 px-4 py-3 text-slate-600 hover:text-slate-900 hover:bg-white/60 rounded-xl transition-all font-label-caps text-label-caps" href="/settings">
-            <span class="material-symbols-outlined">settings</span><span>SETTINGS</span>
-          </a>
-        </li>
-      </ul>
-    </nav>
+  {% include 'partials/sidebar.html' %}
 
     <!-- Main Content -->
     <main class="flex-1 md:ml-64 p-4 md:p-8 overflow-y-auto pb-24 md:pb-8 relative w-full h-full">
@@ -131,13 +83,13 @@
         <!-- Header -->
         <div class="flex items-center justify-between flex-wrap gap-4">
           <div>
-            <h2 class="font-display-lg text-3xl font-bold tracking-tight text-slate-900">Software Bill of Materials</h2>
-            <p class="font-code-sm text-code-sm text-slate-500 mt-1">Inventario pacchetti per asset — generato da postura SCA</p>
+            <h2 class="font-display-lg text-3xl font-bold tracking-tight text-slate-900" data-i18n="sbom.header">Software Bill of Materials</h2>
+            <p class="font-code-sm text-code-sm text-slate-500 mt-1" data-i18n="sbom.subtitle">Per-asset package inventory — generated from SCA posture</p>
           </div>
           <div class="flex items-center gap-3">
             <span id="sbom-count" class="font-label-caps text-label-caps text-cyan-600 bg-cyan-50 border border-cyan-100 px-3 py-1.5 rounded-full">—</span>
             <button id="sbom-reload" class="font-label-caps text-label-caps text-slate-600 border border-slate-200 bg-white px-4 py-2 rounded-lg hover:bg-slate-50 transition-colors shadow-sm flex items-center gap-2">
-              <span class="material-symbols-outlined text-sm">refresh</span> RELOAD
+              <span class="material-symbols-outlined text-sm">refresh</span> <span data-i18n="common.reload">RELOAD</span>
             </button>
             <button id="sbom-export-csv" class="inline-flex items-center gap-1 font-label-caps text-[10px] text-slate-600 border border-slate-200 bg-white px-3 py-2 rounded-lg hover:bg-slate-50 transition-colors shadow-sm">
               <span class="material-symbols-outlined text-[14px]">download</span>CSV
@@ -145,20 +97,26 @@
             <button id="sbom-export-xls" class="inline-flex items-center gap-1 font-label-caps text-[10px] text-slate-600 border border-slate-200 bg-white px-3 py-2 rounded-lg hover:bg-slate-50 transition-colors shadow-sm">
               <span class="material-symbols-outlined text-[14px]">table_view</span>XLS
             </button>
+            <button id="sbom-export-cdx" class="inline-flex items-center gap-1 font-label-caps text-[10px] text-cyan-700 border border-cyan-200 bg-cyan-50 px-3 py-2 rounded-lg hover:bg-cyan-100 transition-colors shadow-sm">
+              <span class="material-symbols-outlined text-[14px]">account_tree</span><span data-i18n="sbom.export_cdx">CYCLONEDX</span>
+            </button>
+            <button id="sbom-export-spdx" class="inline-flex items-center gap-1 font-label-caps text-[10px] text-cyan-700 border border-cyan-200 bg-cyan-50 px-3 py-2 rounded-lg hover:bg-cyan-100 transition-colors shadow-sm">
+              <span class="material-symbols-outlined text-[14px]">description</span><span data-i18n="sbom.export_spdx">SPDX</span>
+            </button>
           </div>
         </div>
 
         <!-- Filters -->
         <div class="flex flex-wrap gap-3 items-center">
-          <input id="sbom-filter-asset" type="text" placeholder="Filtra per asset IP…"
+          <input id="sbom-filter-asset" type="text" data-i18n-ph="sbom.filter_asset" placeholder="Filter by asset IP…"
             class="bg-white/70 border border-slate-200 rounded-xl px-4 py-2 font-code-sm text-code-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-cyan-300 focus:ring-1 focus:ring-cyan-200 transition w-52" />
-          <input id="sbom-filter-pkg" type="text" placeholder="Filtra per pacchetto…"
+          <input id="sbom-filter-pkg" type="text" data-i18n-ph="sbom.filter_pkg" placeholder="Filter by package…"
             class="bg-white/70 border border-slate-200 rounded-xl px-4 py-2 font-code-sm text-code-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-cyan-300 focus:ring-1 focus:ring-cyan-200 transition w-52" />
           <select id="sbom-filter-vuln"
             class="bg-white/70 border border-slate-200 rounded-xl px-4 py-2 font-code-sm text-code-sm text-slate-900 focus:outline-none focus:border-cyan-300 focus:ring-1 focus:ring-cyan-200 transition">
-            <option value="">Tutti</option>
-            <option value="vuln">Solo vulnerabili</option>
-            <option value="safe">Solo sicuri</option>
+            <option value="" data-i18n="sbom.filter_all">All</option>
+            <option value="vuln" data-i18n="sbom.filter_vuln">Vulnerable only</option>
+            <option value="safe" data-i18n="sbom.filter_safe">Safe only</option>
           </select>
         </div>
 
@@ -168,49 +126,68 @@
             <table class="w-full text-left border-collapse">
               <thead>
                 <tr class="border-b border-slate-200/70 bg-white/40">
-                  <th class="font-label-caps text-label-caps text-slate-500 px-5 py-4">ASSET</th>
-                  <th class="font-label-caps text-label-caps text-slate-500 px-5 py-4">PACKAGE</th>
-                  <th class="font-label-caps text-label-caps text-slate-500 px-5 py-4">VERSION</th>
-                  <th class="font-label-caps text-label-caps text-slate-500 px-5 py-4">ECOSYSTEM</th>
-                  <th class="font-label-caps text-label-caps text-slate-500 px-5 py-4">CVE</th>
-                  <th class="font-label-caps text-label-caps text-slate-500 px-5 py-4">STATUS</th>
+                  <th class="font-label-caps text-label-caps text-slate-500 px-5 py-4" data-i18n="sbom.th_asset">ASSET</th>
+                  <th class="font-label-caps text-label-caps text-slate-500 px-5 py-4" data-i18n="sbom.th_pkg">PACKAGE</th>
+                  <th class="font-label-caps text-label-caps text-slate-500 px-5 py-4" data-i18n="sbom.th_ver">VERSION</th>
+                  <th class="font-label-caps text-label-caps text-slate-500 px-5 py-4" data-i18n="sbom.th_eco">ECOSYSTEM</th>
+                  <th class="font-label-caps text-label-caps text-slate-500 px-5 py-4" data-i18n="sbom.th_license">LICENSE</th>
+                  <th class="font-label-caps text-label-caps text-slate-500 px-5 py-4" data-i18n="sbom.th_cve">CVE</th>
+                  <th class="font-label-caps text-label-caps text-slate-500 px-5 py-4" data-i18n="sbom.th_status">STATUS</th>
                 </tr>
               </thead>
               <tbody id="sbom-rows" class="divide-y divide-slate-100/70"></tbody>
             </table>
           </div>
-          <div id="sbom-empty" class="hidden p-10 text-center font-code-sm text-code-sm text-slate-400">
-            Nessun dato SBOM. Esegui una scansione di postura dalla dashboard.
+          <div id="sbom-empty" class="hidden p-10 text-center font-code-sm text-code-sm text-slate-400" data-i18n="sbom.empty">
+            No SBOM data. Run a posture scan from the dashboard.
           </div>
           <div id="sbom-loading" class="p-10 text-center font-code-sm text-code-sm text-slate-400 flex items-center justify-center gap-2">
-            <span class="material-symbols-outlined animate-spin text-cyan-400">progress_activity</span> Caricamento…
+            <span class="material-symbols-outlined animate-spin text-cyan-400">progress_activity</span> <span data-i18n="sbom.loading">Loading…</span>
           </div>
         </section>
+
+        <!-- Pager -->
+        <div id="sbom-pager" class="hidden mt-4 flex flex-wrap items-center justify-between gap-3">
+          <span id="sbom-range" class="font-code-sm text-code-sm text-slate-400"></span>
+          <div class="flex items-center gap-2">
+            <label class="font-code-sm text-code-sm text-slate-400 flex items-center gap-1.5">
+              <span data-i18n="sbom.per_page">Per page</span>
+              <select id="sbom-pagesize"
+                class="rounded-lg border border-slate-200 bg-white/70 px-2 py-1 font-code-sm text-code-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-cyan-400/40">
+                <option value="25">25</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+                <option value="0" data-i18n="sbom.filter_all">All</option>
+              </select>
+            </label>
+            <button id="sbom-prev" data-i18n="sbom.prev"
+              class="px-3 py-1.5 rounded-lg border border-slate-200 bg-white/70 font-label-caps text-[10px] text-slate-600 hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors">‹ PREV</button>
+            <span id="sbom-page" class="font-code-sm text-code-sm text-slate-600 min-w-[5rem] text-center"></span>
+            <button id="sbom-next" data-i18n="sbom.next"
+              class="px-3 py-1.5 rounded-lg border border-slate-200 bg-white/70 font-label-caps text-[10px] text-slate-600 hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors">NEXT ›</button>
+          </div>
+        </div>
 
         <p id="sbom-toast" class="hidden font-code-sm text-code-sm px-4 py-2 rounded-lg"></p>
       </div>
     </main>
   </div>
 
-  <!-- BottomNavBar (Mobile) -->
-  <nav class="md:hidden fixed bottom-6 left-4 right-4 flex justify-around items-center px-2 py-2 bg-white/90 backdrop-blur-xl border border-slate-200/50 rounded-2xl shadow-2xl z-50">
-    <a class="flex flex-col items-center justify-center text-slate-400 p-3 hover:text-cyan-600 transition-all" href="/"><span class="material-symbols-outlined">dashboard</span></a>
-    <a class="flex flex-col items-center justify-center text-slate-400 p-3 hover:text-cyan-600 transition-all" href="/assets"><span class="material-symbols-outlined">inventory_2</span></a>
-    <a class="flex flex-col items-center justify-center bg-slate-900 text-cyan-400 shadow-xl rounded-xl p-3 -mt-6 border-4 border-white" href="/sbom"><span class="material-symbols-outlined">receipt_long</span></a>
-    <a class="flex flex-col items-center justify-center text-slate-400 p-3 hover:text-cyan-600 transition-all" href="/audit"><span class="material-symbols-outlined">fact_check</span></a>
-    <a class="flex flex-col items-center justify-center text-slate-400 p-3 hover:text-cyan-600 transition-all" href="/settings"><span class="material-symbols-outlined">settings</span></a>
-  </nav>
+  {% include 'partials/bottomnav.html' %}
 
   <script>
     const $ = id => document.getElementById(id);
     let allRows = [];
+    let filteredRows = [];   // righe dopo i filtri (base per la paginazione)
+    let page = 1;
+    let pageSize = 25;       // 0 = tutte
 
     function vulnBadge(cveCount) {
       if (cveCount === null || cveCount === undefined)
         return `<span class="px-2 py-0.5 rounded-full font-label-caps text-[10px] bg-slate-100 text-slate-500">—</span>`;
       if (cveCount > 0)
-        return `<span class="px-2 py-0.5 rounded-full font-label-caps text-[10px] bg-rose-50 border border-rose-200 text-rose-700">${cveCount} CVE</span>`;
-      return `<span class="px-2 py-0.5 rounded-full font-label-caps text-[10px] bg-emerald-50 border border-emerald-200 text-emerald-700">CLEAN</span>`;
+        return `<span class="px-2 py-0.5 rounded-full font-label-caps text-[10px] bg-rose-50 border border-rose-200 text-rose-700">${t('sbom.cve_n', { n: cveCount })}</span>`;
+      return `<span class="px-2 py-0.5 rounded-full font-label-caps text-[10px] bg-emerald-50 border border-emerald-200 text-emerald-700">${t('sbom.badge_clean')}</span>`;
     }
 
     function ecoTag(eco) {
@@ -219,16 +196,31 @@
       return eco ? `<span class="px-2 py-0.5 rounded-full font-label-caps text-[10px] border ${cls}">${eco}</span>` : '<span class="text-slate-300">—</span>';
     }
 
+    function esc(s) { return String(s ?? '').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
+
+    function licenseTag(lic) {
+      if (!lic || lic === 'NOASSERTION')
+        return '<span class="text-slate-300 font-code-sm text-[11px]">NOASSERTION</span>';
+      const prop = lic.startsWith('LicenseRef-');
+      const cls = prop ? 'text-amber-700 bg-amber-50 border-amber-200'
+                       : 'text-slate-600 bg-slate-50 border-slate-200';
+      return `<span class="px-2 py-0.5 rounded font-code-sm text-[11px] border ${cls}">${esc(lic.replace('LicenseRef-', ''))}</span>`;
+    }
+
     function renderRow(r) {
+      // purl/cpe/sha256/supplier + relazioni: dettaglio SBOM in tooltip sul nome.
+      const deps = (r.depends_on || []).length ? ` | deps: ${esc((r.depends_on || []).join(', '))}` : '';
+      const tip = `${esc(r.purl)}\n${esc(r.cpe)}\nsha256:${esc((r.sha256 || '').slice(0, 16))}…\nsupplier: ${esc(r.supplier)}${deps}`;
       return `<tr class="hover:bg-white/60 transition-colors">
-        <td class="px-5 py-3 font-code-sm text-code-sm text-slate-900 font-semibold">${r.asset_ip}</td>
-        <td class="px-5 py-3 font-code-sm text-code-sm text-slate-700">${r.package}</td>
-        <td class="px-5 py-3 font-code-sm text-code-sm text-slate-500">${r.version || '—'}</td>
+        <td class="px-5 py-3 font-code-sm text-code-sm text-slate-900 font-semibold">${esc(r.asset_ip)}</td>
+        <td class="px-5 py-3 font-code-sm text-code-sm text-slate-700"><span class="cursor-help border-b border-dotted border-slate-300" title="${tip}">${esc(r.package)}</span></td>
+        <td class="px-5 py-3 font-code-sm text-code-sm text-slate-500">${esc(r.version) || '—'}</td>
         <td class="px-5 py-3">${ecoTag(r.ecosystem)}</td>
+        <td class="px-5 py-3">${licenseTag(r.license)}</td>
         <td class="px-5 py-3">${vulnBadge(r.cve_count)}</td>
         <td class="px-5 py-3">${r.cve_count > 0
-          ? `<span class="inline-flex items-center gap-1 font-label-caps text-[10px] text-rose-700"><span class="material-symbols-outlined text-[13px]">warning</span>VULNERABLE</span>`
-          : `<span class="inline-flex items-center gap-1 font-label-caps text-[10px] text-emerald-700"><span class="material-symbols-outlined text-[13px]">verified</span>OK</span>`}
+          ? `<span class="inline-flex items-center gap-1 font-label-caps text-[10px] text-rose-700"><span class="material-symbols-outlined text-[13px]">warning</span>${t('sbom.status_vuln')}</span>`
+          : `<span class="inline-flex items-center gap-1 font-label-caps text-[10px] text-emerald-700"><span class="material-symbols-outlined text-[13px]">verified</span>${t('sbom.status_ok')}</span>`}
         </td>
       </tr>`;
     }
@@ -237,7 +229,7 @@
       const fa = $('sbom-filter-asset').value.toLowerCase();
       const fp = $('sbom-filter-pkg').value.toLowerCase();
       const fv = $('sbom-filter-vuln').value;
-      const filtered = allRows.filter(r => {
+      filteredRows = allRows.filter(r => {
         const ip = (r.asset_ip || '').toLowerCase();
         const pkg = (r.package || '').toLowerCase();
         if (fa && !ip.includes(fa)) return false;
@@ -246,9 +238,31 @@
         if (fv === 'safe' && r.cve_count > 0) return false;
         return true;
       });
-      $('sbom-rows').innerHTML = filtered.map(renderRow).join('');
-      $('sbom-count').textContent = `${filtered.length} pacchetti`;
-      $('sbom-empty').classList.toggle('hidden', filtered.length > 0);
+      page = 1;                 // ogni cambio filtro riparte dalla prima pagina
+      renderPage();
+    }
+
+    // Rende la sola pagina corrente delle righe filtrate + aggiorna il pager.
+    function renderPage() {
+      const total = filteredRows.length;
+      const size = pageSize > 0 ? pageSize : (total || 1);
+      const pages = Math.max(1, Math.ceil(total / size));
+      if (page > pages) page = pages;
+      const start = (page - 1) * size;
+      const slice = filteredRows.slice(start, start + size);
+
+      $('sbom-rows').innerHTML = slice.map(renderRow).join('');
+      $('sbom-count').textContent = t('sbom.count', { n: total });
+      $('sbom-empty').classList.toggle('hidden', total > 0);
+
+      // Pager: nascosto se non c'e' nulla; controlli disabilitati ai bordi.
+      $('sbom-pager').classList.toggle('hidden', total === 0);
+      const shownFrom = total === 0 ? 0 : start + 1;
+      const shownTo = start + slice.length;
+      $('sbom-range').textContent = t('sbom.range', { from: shownFrom, to: shownTo, total: total });
+      $('sbom-page').textContent = t('sbom.page', { p: page, n: pages });
+      $('sbom-prev').disabled = page <= 1;
+      $('sbom-next').disabled = page >= pages;
     }
 
     async function load() {
@@ -264,19 +278,31 @@
         applyFilters();
       } catch (e) {
         $('sbom-loading').classList.add('hidden');
-        $('sbom-empty').textContent = 'Errore caricamento dati SBOM.';
+        $('sbom-empty').textContent = t('sbom.err_load');
         $('sbom-empty').classList.remove('hidden');
       }
     }
 
     function exportCSV(rows, filename) {
-      const h = ['asset_ip','package','version','ecosystem','cve_count'];
+      const h = ['asset_ip','package','version','ecosystem','license','supplier','purl','cpe','sha256','cve_count'];
       const csv = [h.join(','), ...rows.map(r => h.map(k => JSON.stringify(r[k] ?? '')).join(','))].join('\n');
       const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], {type:'text/csv'})); a.download = filename; a.click();
     }
     function exportXLS(rows, filename) {
-      const ws = XLSX.utils.json_to_sheet(rows); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'SBOM'); XLSX.writeFile(wb, filename);
+      // depends_on e' un array: appiattito a stringa per il foglio.
+      const flat = rows.map(r => ({ ...r, depends_on: (r.depends_on || []).join('; ') }));
+      const ws = XLSX.utils.json_to_sheet(flat); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'SBOM'); XLSX.writeFile(wb, filename);
     }
+    // Export standard: il backend genera CycloneDX/SPDX; il browser scarica il file.
+    function exportStandard(format) { window.location = `/api/sbom/export?format=${format}`; }
+
+    $('sbom-prev').addEventListener('click', () => { if (page > 1) { page--; renderPage(); } });
+    $('sbom-next').addEventListener('click', () => { page++; renderPage(); });
+    $('sbom-pagesize').addEventListener('change', (e) => {
+      pageSize = parseInt(e.target.value, 10) || 0;
+      page = 1;
+      renderPage();
+    });
 
     $('sbom-reload').addEventListener('click', load);
     $('sbom-filter-asset').addEventListener('input', applyFilters);
@@ -284,6 +310,11 @@
     $('sbom-filter-vuln').addEventListener('change', applyFilters);
     $('sbom-export-csv').addEventListener('click', () => exportCSV(allRows, 'sbom.csv'));
     $('sbom-export-xls').addEventListener('click', () => exportXLS(allRows, 'sbom.xlsx'));
+    $('sbom-export-cdx').addEventListener('click', () => exportStandard('cyclonedx'));
+    $('sbom-export-spdx').addEventListener('click', () => exportStandard('spdx'));
+
+    // Cambio lingua: ridisegna righe/badge/pager (stringhe dinamiche via t()).
+    window.addEventListener('langchange', () => { if (allRows.length) renderPage(); });
 
     load();
   </script>

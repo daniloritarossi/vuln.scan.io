@@ -114,14 +114,14 @@ Le password degli asset sono cifrate a riposo tramite il binario [encdec](https:
 | **Avvii successivi** | Binario già presente → nessuna interazione, nessuna password chiesta |
 | **Segreto** | Compilato dentro il binario; non esiste su disco né in variabili d'ambiente |
 | **Algoritmo** | AES-GCM machine-bound con prefisso applicativo (`ENC`/`DEC`) |
-| **Formato in `assets.txt`** | `ENC:<hex-ciphertext>` |
+| **Formato in tabella `assets`** | `ENC:<hex-ciphertext>` |
 
 ### Flusso encrypt/decrypt
 
 ```
 UI inserisce password  →  POST /api/assets
                           └─ crypto.encrypt_password()
-                             └─ encdec ENC <plain>  →  ENC:<hex>  →  assets.txt
+                             └─ encdec ENC <plain>  →  ENC:<hex>  →  tabella Supabase 'assets'
 
 Login SSH asset        →  scanner._scan_auth_real()
                           └─ crypto.decrypt_password(ENC:<hex>)
@@ -151,7 +151,7 @@ Quale macchina di test vuoi creare?
   3) Nessuna — salta
 ```
 
-Entrambe usano credenziali `admin` / `admin` e, a fine setup, offrono lo stesso sottomenu «Aggiungere a `assets.txt`?» (cifrate / chiaro / No). La riga scritta ha formato `IP|admin|<pw>|<os_type>|<os_major_version>`.
+Entrambe usano credenziali `admin` / `admin` e, a fine setup, offrono lo stesso sottomenu «Aggiungere all'inventario asset?» (cifrate / chiaro / No). L'asset viene inserito nella tabella Supabase `assets` via PostgREST.
 
 ### Linux — specifiche
 
@@ -180,7 +180,7 @@ python3.6 --version         # Python 3.6.x (obsoleto, via deadsnakes)
 ./stop.sh                   # rimuove il container automaticamente
 ```
 
-### Sottomenu «Aggiungere a `assets.txt`?»
+### Sottomenu «Aggiungere all'inventario asset?»
 
 Dopo l'avvio del container il wizard chiede se aggiungerlo all'inventario, con tre scelte:
 
@@ -188,9 +188,9 @@ Dopo l'avvio del container il wizard chiede se aggiungerlo all'inventario, con t
 |---|---|
 | 1 — credenziali cifrate | Cifra `admin` con `encdec` e salva `ENC:<hex>`. Se il binario `encdec` manca o la cifratura fallisce, avvisa esplicitamente e ripiega su password in chiaro |
 | 2 — password in chiaro | Salva `admin` in chiaro (nessun tentativo di cifratura) |
-| 3 — No | Non modifica `assets.txt` |
+| 3 — No | Non modifica l'inventario |
 
-La riga scritta ha sempre il formato `IP|admin|<pw>|linux|`.
+L'asset e' inserito con `username=admin`, `os_type=linux`.
 
 ### Windows — specifiche
 
@@ -237,7 +237,7 @@ ls -l /dev/kvm                                          # crw-rw---- root kvm
 **Alternative senza BIOS** (se non puoi/vuoi toccare il firmware):
 
 - **Emulazione software (QEMU-TCG):** in `docker-test-machine-windows/compose.yml` aggiungi `KVM: "N"` fra le `environment`. Funziona senza `/dev/kvm` ma è **molto lento** (installazione di Windows = ore).
-- **Host Windows esterno:** una VM cloud (es. **AWS Free Tier**, Windows Server `t3.micro`, 750 h/mese per 12 mesi) o un PC Windows in LAN. Abiliti OpenSSH + installi Notepad++/PuTTY e aggiungi l'IP a `assets.txt` con `os_type = windows`. Nessuna virtualizzazione locale.
+- **Host Windows esterno:** una VM cloud (es. **AWS Free Tier**, Windows Server `t3.micro`, 750 h/mese per 12 mesi) o un PC Windows in LAN. Abiliti OpenSSH + installi Notepad++/PuTTY e aggiungi l'IP all'inventario asset con `os_type = windows`. Nessuna virtualizzazione locale.
 
 | Parametro | Valore |
 |---|---|
@@ -329,10 +329,9 @@ start.sh ──► encdec setup ──► wizard config.json ──► .venv + d
 | `scanner.py` | Scansione asset: banner grabbing TCP + audit SSH (con decrypt password) |
 | `cve.py` | Lookup CVE su OSV.dev + sintesi AI + remediation |
 | `posture.py` | SCA per asset: inventario pacchetti + OSV |
-| `assets.py` | Parsing e CRUD inventario asset (`assets.txt`) |
+| `assets.py` | CRUD inventario asset su Supabase (tabella `assets`) |
 | `db.py` | Persistenza Supabase (best-effort) |
 | `config.json` | Configurazione runtime (generato dal wizard) |
-| `assets.txt` | Inventario asset (`IP\|username\|ENC:<hex>`) |
 | `docker-test-machine/Dockerfile` | Immagine Linux vulnerabile per test |
 
 ---
@@ -484,20 +483,18 @@ Stati visivi: `idle` (grigio) → `running` (cyan pulsante) → `done` (verde �
 
 ---
 
-## Formato `assets.txt`
+## Inventario asset (tabella Supabase `assets`)
 
-```
-# commento
-45.33.32.156||||                              # no-auth (banner grab)
-172.17.0.2|admin|ENC:a1b2c3...|linux|        # auth SSH Linux, password cifrata
-172.17.0.3|admin|ENC:d4e5f6...|windows|11    # auth SSH Windows (winget+registro)
-10.0.0.5||||                                  # solo IP, equivale a no-auth
-```
-
-Formato colonne: `IP|username|password|os_type|os_major_version`
+L'inventario vive nella tabella `public.assets` (Supabase locale). Colonne:
+`ip`, `username`, `password` (cifrata `ENC:<hex>`), `os_type` (`linux`/`windows`),
+`os_major_version`, `enabled`.
 
 - Password in chiaro → badge ⚠️ NOT ENCRYPTED; health check SSH FAIL
 - Password `ENC:<hex>` → cifrata con encdec; health check esegue login reale
+
+**Migrazione dal legacy `assets.txt`**: alla prima lettura, se la tabella e'
+vuota e `assets.txt` esiste, il file viene importato automaticamente e
+rinominato in `assets.txt.migrated` (backup).
 
 ---
 

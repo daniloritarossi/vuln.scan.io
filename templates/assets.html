@@ -18,7 +18,7 @@
     href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
     rel="stylesheet" />
   <!-- Tailwind CSS -->
-  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <script src="/static/vendor/tailwind.js"></script>
   <!-- Tailwind Theme Config -->
   <script id="tailwind-config">
     tailwind.config = {
@@ -101,8 +101,8 @@
       min-height: max(884px, 100dvh);
     }
   </style>
-  <script src="/static/i18n.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="/static/i18n.js?v=9"></script>
+  <script src="/static/vendor/xlsx.full.min.js"></script>
   <script src="/static/tableutils.js"></script>
 </head>
 
@@ -169,84 +169,14 @@
         })();
     </script>
   </div>
-  <!-- TopAppBar -->
-  <header
-    class="fixed top-0 w-full z-50 bg-white/80 backdrop-blur-xl border-b border-slate-200/50 flex justify-between items-center px-margin-desktop h-16 transition-all">
-    <div class="flex items-center gap-4">
-      <img src="/static/logo-icon.svg" class="w-11 h-11" alt="VULN.SCAN.IO" />
-      <h1 class="font-headline-md text-headline-md font-bold tracking-tight"><span
-          class="text-orange-500">VULN</span><span class="text-slate-400">.</span><span
-          class="text-orange-500">SCAN</span><span class="text-slate-400">.</span><span class="text-cyan-500">IO</span>
-      </h1>
-      <span
-        class="font-label-caps text-label-caps text-cyan-600 tracking-[0.2em] ml-4 hidden md:block px-2.5 py-1 bg-cyan-50 rounded-full border border-cyan-100/50"
-        data-i18n="top.asset_registry">ASSET_REGISTRY</span>
-    </div>
-    <div class="flex items-center gap-3">
-      <div class="flex items-center gap-1 bg-slate-100 rounded-lg p-0.5">
-        <button data-lang-btn="en"
-          class="px-2 py-1 rounded-md font-label-caps text-[10px] transition-colors">EN</button>
-        <button data-lang-btn="it"
-          class="px-2 py-1 rounded-md font-label-caps text-[10px] transition-colors">IT</button>
-      </div>
-      <div class="text-slate-500 hover:text-cyan-600 hover:glow-sm transition-all duration-150 cursor-pointer">
-        <span class="material-symbols-outlined">sensors</span>
-      </div>
-    </div>
-  </header>
+{% set active_page = 'assets' %}
+{% set crumbs = [
+  {'key': 'crumb.home', 'text': 'Home', 'href': '/'},
+  {'key': 'top.asset_registry', 'text': 'Asset Inventory'}
+] %}
+  {% include 'partials/topbar.html' %}
   <div class="flex pt-16 h-screen w-full overflow-hidden">
-    <!-- NavigationDrawer (Web) -->
-    <nav
-      class="hidden md:flex flex-col py-panel-padding gap-base-unit fixed left-0 top-16 h-[calc(100vh-64px)] w-64 bg-white/40 backdrop-blur-xl border-r border-slate-200/50 z-40">
-      <div class="px-6 mb-4">
-        <span class="font-label-caps text-label-caps text-slate-400 tracking-[0.2em]">CORE_NAV</span>
-      </div>
-      <ul class="flex flex-col w-full px-4 gap-2">
-        <li class="">
-          <a class="flex items-center gap-3 px-4 py-3 text-slate-600 hover:text-slate-900 hover:bg-white/60 rounded-xl transition-all font-label-caps text-label-caps"
-            href="/">
-            <span class="material-symbols-outlined">dashboard</span>
-            <span class="">DASHBOARD</span>
-          </a>
-        </li>
-        <!-- Active: ASSETS -->
-        <li class="">
-          <a class="flex items-center gap-3 px-4 py-3 text-white bg-slate-900 rounded-xl font-label-caps text-label-caps shadow-lg shadow-slate-900/10 transition-transform hover:scale-[1.02]"
-            href="/assets">
-            <span class="material-symbols-outlined text-cyan-400">inventory_2</span>
-            <span class="">ASSETS</span>
-          </a>
-        </li>
-        <li class="">
-          <a class="flex items-center gap-3 px-4 py-3 text-slate-600 hover:text-slate-900 hover:bg-white/60 rounded-xl transition-all font-label-caps text-label-caps"
-            href="/intel">
-            <span class="material-symbols-outlined">psychology</span>
-            <span class="">SECURITY POSTURE</span>
-          </a>
-        </li>
-        <li class="">
-          <a class="flex items-center gap-3 px-4 py-3 text-slate-600 hover:text-slate-900 hover:bg-white/60 rounded-xl transition-all font-label-caps text-label-caps"
-            href="/audit">
-            <span class="material-symbols-outlined">fact_check</span>
-            <span class="">AUDIT</span>
-          </a>
-        </li>
-        <li class="">
-          <a class="flex items-center gap-3 px-4 py-3 text-slate-600 hover:text-slate-900 hover:bg-white/60 rounded-xl transition-all font-label-caps text-label-caps"
-            href="/sbom">
-            <span class="material-symbols-outlined">receipt_long</span>
-            <span class="">SBOM</span>
-          </a>
-        </li>
-        <li class="">
-          <a class="flex items-center gap-3 px-4 py-3 text-slate-600 hover:text-slate-900 hover:bg-white/60 rounded-xl transition-all font-label-caps text-label-caps"
-            href="/settings">
-            <span class="material-symbols-outlined">settings</span>
-            <span class="">SETTINGS</span>
-          </a>
-        </li>
-      </ul>
-    </nav>
+  {% include 'partials/sidebar.html' %}
     <!-- Main Content Canvas -->
     <main class="flex-1 md:ml-64 p-4 md:p-8 overflow-y-auto pb-24 md:pb-8 relative w-full h-full">
       <div class="mx-auto space-y-8">
@@ -256,8 +186,8 @@
             <h2 class="font-display-lg text-3xl font-bold tracking-tight text-slate-900" data-i18n="assets.header">Asset
               Inventory</h2>
             <p class="font-code-sm text-code-sm text-slate-500 mt-1"><span data-i18n="assets.subtitle">CRUD management
-                of the config file</span> <span
-                class="text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded">assets.txt</span></p>
+                of the inventory table</span> <span
+                class="text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded">supabase&nbsp;·&nbsp;assets</span></p>
           </div>
           <div class="flex items-center gap-3">
             <span id="count"
@@ -291,14 +221,19 @@
             </button>
           </div>
           <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-3">
-            <select id="new-ostype"
+            <select id="new-ostype" required
               class="bg-white/70 border border-slate-200 rounded-xl px-4 py-2.5 font-code-sm text-code-sm text-slate-900 focus:outline-none focus:border-cyan-300 focus:ring-1 focus:ring-cyan-200 transition">
-              <option value="">— OS type (optional) —</option>
+              <option value="" disabled selected data-i18n="assets.os_required">Select operating system…</option>
               <option value="linux">Linux</option>
               <option value="windows">Windows</option>
             </select>
-            <input id="new-osver" type="text" placeholder="major version (e.g. 22.04, 10, 2019)"
+            <input id="new-osver" type="text" data-i18n-ph="assets.ph_osver" placeholder="Operating system version (e.g. Ubuntu 22.04, Windows 11)"
               class="bg-white/70 border border-slate-200 rounded-xl px-4 py-2.5 font-code-sm text-code-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-cyan-300 focus:ring-1 focus:ring-cyan-200 transition" />
+            <label class="flex items-center gap-2 px-2 font-code-sm text-code-sm text-slate-600 cursor-pointer select-none">
+              <input id="new-enabled" type="checkbox" checked
+                class="h-4 w-4 rounded border-slate-300 text-cyan-600 focus:ring-cyan-300" />
+              <span data-i18n="assets.th_scan">SCAN</span>
+            </label>
           </div>
           <p class="font-code-sm text-[11px] text-slate-400 mt-3" data-i18n="assets.help">Without username and password
             the asset is <span class="text-slate-600">NOT REQUIRED</span> (unauthenticated banner-grab).</p>
@@ -350,6 +285,20 @@
                       </span>
                     </span>
                   </th>
+                  <th data-sort="enabled"
+                    class="font-label-caps text-label-caps text-slate-500 px-5 py-4 cursor-pointer select-none hover:text-slate-700 whitespace-nowrap">
+                    <span class="inline-flex items-center gap-1">
+                      <span data-i18n="assets.th_scan">SCAN</span>
+                      <span class="relative group inline-flex items-center">
+                        <span
+                          class="material-symbols-outlined text-[15px] text-slate-400 hover:text-cyan-600 cursor-help">info</span>
+                        <span
+                          class="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-2 w-80 p-3 rounded-lg bg-slate-900 text-slate-100 text-[11px] leading-relaxed font-body-md normal-case tracking-normal opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-50 shadow-xl"
+                          data-i18n="assets.scan_tooltip">Enable or disable this asset for scans.</span>
+                      </span>
+                      <span id="sicon-enabled"></span>
+                    </span>
+                  </th>
                   <th class="font-label-caps text-label-caps text-slate-500 px-5 py-4 text-right"
                     data-i18n="assets.th_actions">ACTIONS</th>
                 </tr>
@@ -365,20 +314,7 @@
       </div>
     </main>
   </div>
-  <!-- BottomNavBar (Mobile) -->
-  <nav
-    class="md:hidden fixed bottom-6 left-4 right-4 flex justify-around items-center px-2 py-2 bg-white/90 backdrop-blur-xl border border-slate-200/50 rounded-2xl shadow-2xl z-50">
-    <a class="flex flex-col items-center justify-center text-slate-400 p-3 hover:text-cyan-600 transition-all" href="/">
-      <span class="material-symbols-outlined">dashboard</span>
-    </a>
-    <a class="flex flex-col items-center justify-center bg-slate-900 text-cyan-400 shadow-xl rounded-xl p-3 -mt-6 border-4 border-white"
-      href="/assets">
-      <span class="material-symbols-outlined">inventory_2</span>
-    </a>
-    <a class="flex flex-col items-center justify-center text-slate-400 p-3 hover:text-cyan-600 transition-all" href="/">
-      <span class="material-symbols-outlined">analytics</span>
-    </a>
-  </nav>
+  {% include 'partials/bottomnav.html' %}
 
   <script>
     const $ = (id) => document.getElementById(id);
@@ -392,7 +328,7 @@
     let assetPage = 0, assetPageSize = 50;
 
     function updateSortIcons() {
-      ['index', 'ip', 'username', 'auth_required', 'os_type', 'os_major_version'].forEach(f => {
+      ['index', 'ip', 'username', 'auth_required', 'os_type', 'os_major_version', 'enabled'].forEach(f => {
         const el = document.getElementById('sicon-' + f);
         if (el) el.innerHTML = sortIcon(f, assetSort);
       });
@@ -430,10 +366,30 @@
       return `<span class="text-slate-300">—</span>`;
     }
 
+    // SCAN column: interruttore on/off che esclude l'asset dalle scansioni.
+    function scanToggle(a) {
+      const on = !!a.enabled;
+      const knob = on ? 'translate-x-4 bg-white' : 'translate-x-0.5 bg-white';
+      const track = on ? 'bg-cyan-500' : 'bg-slate-300';
+      const label = on ? t('assets.scan_on') : t('assets.scan_off');
+      const labelCls = on ? 'text-cyan-700' : 'text-slate-400';
+      return `<button data-act="toggle" data-i="${a.index}" role="switch" aria-checked="${on}"
+        class="inline-flex items-center gap-2 group" title="${label}">
+        <span class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${track}">
+          <span class="inline-block h-4 w-4 transform rounded-full shadow transition-transform ${knob}"></span>
+        </span>
+        <span class="font-label-caps text-[10px] ${labelCls}">${label}</span>
+      </button>`;
+    }
+
     function osSelectHtml(val) {
       const v = (val || '').toLowerCase();
+      const known = v === 'linux' || v === 'windows';
+      // os_type obbligatorio: se l'asset non ne ha uno (legacy) si forza una scelta
+      // esplicita con un placeholder disabilitato, validato in saveEdit.
+      const placeholder = known ? '' : `<option value="" disabled selected>${t('assets.os_required')}</option>`;
       return `<select class="edit-ostype bg-white border border-cyan-200 rounded-lg px-2 py-1.5 font-code-sm text-[12px] text-slate-900 focus:outline-none focus:ring-1 focus:ring-cyan-300">
-      <option value="" ${!v ? 'selected' : ''}>—</option>
+      ${placeholder}
       <option value="linux" ${v === 'linux' ? 'selected' : ''}>Linux</option>
       <option value="windows" ${v === 'windows' ? 'selected' : ''}>Windows</option>
     </select>`;
@@ -451,6 +407,12 @@
         <td class="px-5 py-3">${osSelectHtml(a.os_type)}</td>
         <td class="px-5 py-3">${inputCell(a.os_major_version, 'edit-osver')}</td>
         <td class="px-5 py-3 text-slate-300 font-code-sm text-[11px]">—</td>
+        <td class="px-5 py-3">
+          <label class="flex items-center gap-2 font-code-sm text-[11px] text-slate-600 cursor-pointer select-none">
+            <input type="checkbox" class="edit-enabled h-4 w-4 rounded border-slate-300 text-cyan-600 focus:ring-cyan-300" ${a.enabled ? 'checked' : ''} />
+            <span>${a.enabled ? t('assets.scan_on') : t('assets.scan_off')}</span>
+          </label>
+        </td>
         <td class="px-5 py-3">
           <div class="flex items-center justify-end gap-2">
             <button data-act="save" data-i="${a.index}" class="text-emerald-600 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-lg font-label-caps text-[10px] hover:bg-emerald-100 transition flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">check</span>${t('common.save')}</button>
@@ -474,6 +436,7 @@
       <td class="px-5 py-3">${osBadge(a.os_type, a.os_major_version)}</td>
       <td class="px-5 py-3 font-code-sm text-[11px] text-slate-500">${a.os_major_version ? esc(a.os_major_version) : '<span class="text-slate-300">—</span>'}</td>
       <td class="px-5 py-3" id="act-${a.index}">${statusCell(a)}</td>
+      <td class="px-5 py-3">${scanToggle(a)}</td>
       <td class="px-5 py-3">
         <div class="flex items-center justify-end gap-2">
           <button data-act="edit" data-i="${a.index}" class="text-cyan-600 bg-cyan-50 border border-cyan-100 px-3 py-1.5 rounded-lg font-label-caps text-[10px] hover:bg-cyan-100 transition flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">edit</span>${t('common.edit')}</button>
@@ -524,7 +487,7 @@
       const page = assetPageSize === 0 ? sorted : sorted.slice(assetPage * assetPageSize, assetPage * assetPageSize + assetPageSize);
       page.forEach((a) => {
         const tr = document.createElement('tr');
-        tr.className = 'hover:bg-white/60 transition-colors';
+        tr.className = 'hover:bg-white/60 transition-colors' + (a.enabled ? '' : ' bg-slate-50/80');
         tr.innerHTML = rowHtml(a);
         rows.appendChild(tr);
       });
@@ -547,15 +510,17 @@
     async function createAsset() {
       const ip = $('new-ip').value.trim();
       if (!ip) { $('new-ip').focus(); return; }
+      if (!$('new-ostype').value) { showToast(t('assets.err_ostype'), false); $('new-ostype').focus(); return; }
       const body = {
         ip, username: $('new-user').value.trim(), password: $('new-pass').value.trim(),
-        os_type: $('new-ostype').value, os_major_version: $('new-osver').value.trim()
+        os_type: $('new-ostype').value, os_major_version: $('new-osver').value.trim(),
+        enabled: $('new-enabled').checked
       };
       const r = await fetch('/api/assets', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const d = await r.json();
       if (!r.ok) { showToast(d.error || t('assets.err_create'), false); return; }
       $('new-ip').value = ''; $('new-user').value = ''; $('new-pass').value = '';
-      $('new-ostype').value = ''; $('new-osver').value = '';
+      $('new-ostype').value = ''; $('new-osver').value = ''; $('new-enabled').checked = true;
       showToast(t('assets.added'));
       await load();
     }
@@ -563,9 +528,12 @@
     async function saveEdit(index, tr) {
       const ip = tr.querySelector('.edit-ip').value.trim();
       if (!ip) { tr.querySelector('.edit-ip').focus(); return; }
+      const osSel = tr.querySelector('.edit-ostype');
+      if (!osSel.value) { showToast(t('assets.err_ostype'), false); osSel.focus(); return; }
       const body = {
         ip, username: tr.querySelector('.edit-user').value.trim(), password: tr.querySelector('.edit-pass').value.trim(),
-        os_type: tr.querySelector('.edit-ostype').value, os_major_version: tr.querySelector('.edit-osver').value.trim()
+        os_type: tr.querySelector('.edit-ostype').value, os_major_version: tr.querySelector('.edit-osver').value.trim(),
+        enabled: tr.querySelector('.edit-enabled').checked
       };
       const r = await fetch(`/api/assets/${index}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const d = await r.json();
@@ -595,7 +563,27 @@
       else if (act === 'cancel') { editingIndex = null; render(); }
       else if (act === 'save') { saveEdit(i, tr); }
       else if (act === 'delete') { deleteAsset(i); }
+      else if (act === 'toggle') { toggleAsset(i); }
     });
+
+    async function toggleAsset(index) {
+      const a = assets.find((x) => x.index === index);
+      if (!a) return;
+      const next = !a.enabled;
+      try {
+        const r = await fetch(`/api/assets/${index}/enabled`, {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enabled: next })
+        });
+        const d = await r.json();
+        if (!r.ok) { showToast(d.error || t('assets.err_toggle'), false); return; }
+        a.enabled = d.enabled;
+        showToast(t(a.enabled ? 'assets.enabled_on' : 'assets.enabled_off'));
+        render();
+      } catch (_) {
+        showToast(t('assets.err_toggle'), false);
+      }
+    }
 
     $('create').addEventListener('click', createAsset);
     $('new-pass').addEventListener('keydown', (e) => { if (e.key === 'Enter') createAsset(); });
@@ -614,7 +602,7 @@
     function _buildAssetRows() {
       return sortArray(assets, assetSort.field, assetSort.dir).map(a => ({
         Index: a.index, IP_Host: a.ip, Username: a.username || '', Auth_Required: a.auth_required ? 'Yes' : 'No',
-        OS_Type: a.os_type || '', OS_Version: a.os_major_version || ''
+        OS_Type: a.os_type || '', OS_Version: a.os_major_version || '', Scan_Enabled: a.enabled ? 'Yes' : 'No'
       }));
     }
     $('exportAssetsCSV').addEventListener('click', () => exportCSV(_buildAssetRows(), 'assets.csv'));

@@ -1,23 +1,29 @@
 """
 assets.py
 ---------
-Lettura e parsing del file inventario degli asset.
+Inventario degli asset, persistito su Supabase (tabella 'assets').
 
-Formato di ogni riga del file (default: assets.txt):
+Storicamente l'inventario viveva nel file assets.txt (formato
+IP|username|password|os_type|os_major_version|enabled). Ora la sorgente di
+verita' e' la tabella 'assets': alla prima lettura, se la tabella e' vuota e
+assets.txt esiste, il file viene importato una sola volta e poi rinominato in
+assets.txt.migrated (backup).
 
-    IP|username|password
-
-Regole:
-- Le righe vuote e quelle che iniziano con '#' sono ignorate (commenti).
-- Se username e password sono assenti o vuoti (es. "1.2.3.4||" oppure
-  solo "1.2.3.4"), l'asset viene marcato come "Autenticazione non richiesta"
-  (auth_required = False).
-- Se sono presenti credenziali, auth_required = True.
+Regole invariate:
+- Se username e password sono assenti o vuoti l'asset e' "Autenticazione non
+  richiesta" (auth_required = False).
+- Le password sono memorizzate cifrate con prefisso 'ENC:' (vedi crypto.py).
 """
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List
+from typing import List, Optional
+
+import db
+
+
+class AssetStoreError(RuntimeError):
+    """Supabase non raggiungibile: inventario asset non disponibile."""
 
 
 @dataclass
@@ -28,6 +34,8 @@ class Asset:
     password: str = ""
     os_type: str = ""          # "linux" | "windows" | ""
     os_major_version: str = "" # e.g. "22.04", "10", "2019"
+    enabled: bool = True       # False => asset escluso dalle scansioni
+    id: Optional[int] = None   # id riga Supabase (None se non persistito)
 
     @property
     def auth_required(self) -> bool:
@@ -42,12 +50,38 @@ class Asset:
             "auth_required": self.auth_required,
             "os_type": self.os_type or None,
             "os_major_version": self.os_major_version or None,
+            "enabled": self.enabled,
         }
+
+    def to_row(self) -> dict:
+        """Riga per la tabella 'assets' (password inclusa, gia' cifrata)."""
+        return {
+            "ip": self.ip,
+            "username": self.username,
+            "password": self.password,
+            "os_type": self.os_type,
+            "os_major_version": self.os_major_version,
+            "enabled": self.enabled,
+        }
+
+
+def _row_to_asset(row: dict) -> Asset:
+    """Converte una riga della tabella 'assets' in un oggetto Asset."""
+    return Asset(
+        ip=row.get("ip") or "",
+        username=row.get("username") or "",
+        password=row.get("password") or "",
+        os_type=(row.get("os_type") or "").lower(),
+        os_major_version=row.get("os_major_version") or "",
+        enabled=bool(row.get("enabled", True)),
+        id=row.get("id"),
+    )
 
 
 def parse_line(line: str) -> Asset | None:
     """
-    Converte una singola riga del file in un oggetto Asset.
+    Converte una singola riga del legacy assets.txt in un oggetto Asset.
+    Usata solo dalla migrazione una-tantum.
 
     Ritorna None se la riga e' un commento, e' vuota o non contiene un IP.
     """
@@ -55,7 +89,6 @@ def parse_line(line: str) -> Asset | None:
     if not line or line.startswith("#"):
         return None
 
-    # Split su '|' mantenendo eventuali campi vuoti (maxsplit per robustezza).
     parts = line.split("|")
     ip = parts[0].strip()
     if not ip:
@@ -65,55 +98,83 @@ def parse_line(line: str) -> Asset | None:
     password = parts[2].strip() if len(parts) > 2 else ""
     os_type = parts[3].strip().lower() if len(parts) > 3 else ""
     os_major_version = parts[4].strip() if len(parts) > 4 else ""
+    # Campo 'enabled' (opzionale, ultimo): assente o vuoto => abilitato (retrocompat).
+    # Disabilitato solo con un valore esplicito falsy (0/false/no/off/disabled).
+    enabled_raw = parts[5].strip().lower() if len(parts) > 5 else ""
+    enabled = enabled_raw not in ("0", "false", "no", "off", "disabled")
     return Asset(ip=ip, username=username, password=password,
-                 os_type=os_type, os_major_version=os_major_version)
+                 os_type=os_type, os_major_version=os_major_version,
+                 enabled=enabled)
+
+
+def _migrate_from_file(path: str | Path) -> bool:
+    """
+    Importa il legacy assets.txt nella tabella 'assets' (solo se la tabella
+    e' vuota, controllato dal chiamante). Dopo l'import il file viene
+    rinominato in <path>.migrated come backup. Ritorna True se ha importato.
+    """
+    p = Path(path)
+    if not p.exists():
+        return False
+    parsed = [a for a in
+              (parse_line(raw) for raw in p.read_text(encoding="utf-8").splitlines())
+              if a]
+    if not parsed:
+        return False
+    if not db.insert_assets([a.to_row() for a in parsed]):
+        return False
+    p.rename(p.with_suffix(p.suffix + ".migrated"))
+    return True
 
 
 def load_assets(path: str | Path = "assets.txt") -> List[Asset]:
     """
-    Carica tutti gli asset validi dal file di inventario.
+    Carica l'inventario dalla tabella 'assets' (ordinato per id).
 
-    Solleva FileNotFoundError se il file non esiste.
+    'path' indica il legacy assets.txt, usato solo per la migrazione
+    una-tantum quando la tabella e' vuota.
+
+    Solleva AssetStoreError se Supabase non e' raggiungibile.
     """
-    p = Path(path)
-    if not p.exists():
-        raise FileNotFoundError(f"Inventory not found: {p}")
-
-    assets: List[Asset] = []
-    for raw in p.read_text(encoding="utf-8").splitlines():
-        asset = parse_line(raw)
-        if asset:
-            assets.append(asset)
-    return assets
+    rows = db.fetch_assets()
+    if rows is None:
+        raise AssetStoreError(
+            "Supabase non raggiungibile: inventario asset non disponibile.")
+    if not rows and _migrate_from_file(path):
+        rows = db.fetch_assets() or []
+    return [_row_to_asset(r) for r in rows]
 
 
-def save_assets(assets: List[Asset], path: str | Path = "assets.txt") -> None:
-    """
-    Riscrive il file di inventario con la lista di asset fornita.
+def get_asset(asset_id: int, path: str | Path = "assets.txt") -> Optional[Asset]:
+    """Ritorna l'asset con l'id indicato, None se non esiste."""
+    for a in load_assets(path):
+        if a.id == asset_id:
+            return a
+    return None
 
-    Preserva il blocco di commenti iniziale (righe '#' o vuote in testa al file)
-    e riscrive le righe asset nel formato 'IP|username|password'.
-    """
-    p = Path(path)
-    header: List[str] = []
-    if p.exists():
-        for raw in p.read_text(encoding="utf-8").splitlines():
-            s = raw.strip()
-            if s.startswith("#") or not s:
-                header.append(raw)
-            else:
-                break  # primo asset: il blocco header e' finito.
 
-    lines = header[:]
-    if lines and lines[-1].strip() != "":
-        lines.append("")
-    for a in assets:
-        lines.append(f"{a.ip}|{a.username}|{a.password}|{a.os_type}|{a.os_major_version}")
-    p.write_text("\n".join(lines) + "\n", encoding="utf-8")
+def add_asset(asset: Asset) -> Optional[int]:
+    """Inserisce un asset in tabella e ritorna il suo id (None se fallisce)."""
+    return db.insert_asset(asset.to_row())
+
+
+def update_asset(asset_id: int, asset: Asset) -> bool:
+    """Aggiorna l'asset indicato. False se non esiste o DB non raggiungibile."""
+    return db.update_asset(asset_id, asset.to_row())
+
+
+def set_asset_enabled(asset_id: int, enabled: bool) -> bool:
+    """Abilita/disabilita l'asset indicato."""
+    return db.update_asset(asset_id, {"enabled": bool(enabled)})
+
+
+def delete_asset(asset_id: int) -> bool:
+    """Elimina l'asset indicato. False se non esiste o DB non raggiungibile."""
+    return db.delete_asset(asset_id)
 
 
 if __name__ == "__main__":
     # Test rapido: stampa l'inventario interpretato.
     for a in load_assets():
         mode = "AUTH" if a.auth_required else "NO-AUTH"
-        print(f"{a.ip:20} [{mode}] user={a.username or '-'}")
+        print(f"[{a.id}] {a.ip:20} [{mode}] user={a.username or '-'}")

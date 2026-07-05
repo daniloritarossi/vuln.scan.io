@@ -18,7 +18,7 @@
     href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
     rel="stylesheet" />
   <!-- Tailwind CSS -->
-  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <script src="/static/vendor/tailwind.js"></script>
   <!-- Tailwind Theme Config -->
   <script id="tailwind-config">
     tailwind.config = {
@@ -233,7 +233,7 @@
       min-height: max(884px, 100dvh);
     }
   </style>
-  <script src="/static/i18n.js"></script>
+  <script src="/static/i18n.js?v=9"></script>
 </head>
 
 <body
@@ -316,87 +316,44 @@
         })();
     </script>
   </div>
-  <!-- TopAppBar -->
-  <header
-    class="fixed top-0 w-full z-50 bg-white/80 backdrop-blur-xl border-b border-slate-200/50 flex justify-between items-center px-margin-desktop h-16 transition-all">
-    <div class="flex items-center gap-4">
-      <img src="/static/logo-icon.svg" class="w-11 h-11" alt="VULN.SCAN.IO" />
-      <h1 class="font-headline-md text-headline-md font-bold tracking-tight"><span
-          class="text-orange-500">VULN</span><span class="text-slate-400">.</span><span
-          class="text-orange-500">SCAN</span><span class="text-slate-400">.</span><span class="text-cyan-500">IO</span>
-      </h1>
-      <span
-        class="font-label-caps text-label-caps text-cyan-600 tracking-[0.2em] ml-4 hidden md:block px-2.5 py-1 bg-cyan-50 rounded-full border border-cyan-100/50"
-        data-i18n="top.status_active">SYSTEM_ACTIVE</span>
-    </div>
-    <div class="flex items-center gap-3">
-      <div class="flex items-center gap-1 bg-slate-100 rounded-lg p-0.5">
-        <button data-lang-btn="en"
-          class="px-2 py-1 rounded-md font-label-caps text-[10px] transition-colors">EN</button>
-        <button data-lang-btn="it"
-          class="px-2 py-1 rounded-md font-label-caps text-[10px] transition-colors">IT</button>
-      </div>
-      <div class="text-slate-500 hover:text-cyan-600 hover:glow-sm transition-all duration-150 cursor-pointer">
-        <span class="material-symbols-outlined">sensors</span>
-      </div>
-    </div>
-  </header>
+{% set active_page = 'dashboard' %}
+{% set top_tag_key = 'top.status_active' %}
+{% set top_tag_text = 'System active' %}
+  {% include 'partials/topbar.html' %}
   <div class="flex pt-16 h-screen w-full overflow-hidden">
-    <!-- NavigationDrawer (Web) -->
-    <nav
-      class="hidden md:flex flex-col py-panel-padding gap-base-unit fixed left-0 top-16 h-[calc(100vh-64px)] w-64 bg-white/40 backdrop-blur-xl border-r border-slate-200/50 z-40">
-      <div class="px-6 mb-4">
-        <span class="font-label-caps text-label-caps text-slate-400 tracking-[0.2em]">CORE_NAV</span>
-      </div>
-      <ul class="flex flex-col w-full px-4 gap-2">
-        <!-- Active: DASHBOARD -->
-        <li class="">
-          <a class="flex items-center gap-3 px-4 py-3 text-white bg-slate-900 rounded-xl font-label-caps text-label-caps shadow-lg shadow-slate-900/10 transition-transform hover:scale-[1.02]"
-            href="#">
-            <span class="material-symbols-outlined text-cyan-400">dashboard</span>
-            <span class="">DASHBOARD</span>
-          </a>
-        </li>
-        <li class="">
-          <a class="flex items-center gap-3 px-4 py-3 text-slate-600 hover:text-slate-900 hover:bg-white/60 rounded-xl transition-all font-label-caps text-label-caps"
-            href="/assets">
-            <span class="material-symbols-outlined">inventory_2</span>
-            <span class="">ASSETS</span>
-          </a>
-        </li>
-        <li class="">
-          <a class="flex items-center gap-3 px-4 py-3 text-slate-600 hover:text-slate-900 hover:bg-white/60 rounded-xl transition-all font-label-caps text-label-caps"
-            href="/intel">
-            <span class="material-symbols-outlined">psychology</span>
-            <span class="">SECURITY POSTURE</span>
-          </a>
-        </li>
-        <li class="">
-          <a class="flex items-center gap-3 px-4 py-3 text-slate-600 hover:text-slate-900 hover:bg-white/60 rounded-xl transition-all font-label-caps text-label-caps"
-            href="/audit">
-            <span class="material-symbols-outlined">fact_check</span>
-            <span class="">AUDIT</span>
-          </a>
-        </li>
-        <li class="">
-          <a class="flex items-center gap-3 px-4 py-3 text-slate-600 hover:text-slate-900 hover:bg-white/60 rounded-xl transition-all font-label-caps text-label-caps"
-            href="/sbom">
-            <span class="material-symbols-outlined">receipt_long</span>
-            <span class="">SBOM</span>
-          </a>
-        </li>
-        <li class="">
-          <a class="flex items-center gap-3 px-4 py-3 text-slate-600 hover:text-slate-900 hover:bg-white/60 rounded-xl transition-all font-label-caps text-label-caps"
-            href="/settings">
-            <span class="material-symbols-outlined">settings</span>
-            <span class="">SETTINGS</span>
-          </a>
-        </li>
-      </ul>
-    </nav>
+  {% include 'partials/sidebar.html' %}
     <!-- Main Content Canvas -->
     <main class="flex-1 md:ml-64 p-4 md:p-8 overflow-y-auto pb-24 md:pb-8 relative w-full h-full">
       <div class="mx-auto space-y-8">
+        <!-- Onboarding (shown only when inventory or posture data missing) -->
+        <section id="onboarding" class="hidden neural-panel rounded-2xl p-6">
+          <h3 class="font-label-caps text-label-caps text-slate-500 mb-4 flex items-center gap-2">
+            <span class="material-symbols-outlined text-[16px] text-cyan-500">rocket_launch</span>
+            <span data-i18n="dash.onboard_title">GET STARTED</span>
+          </h3>
+          <div class="flex flex-col md:flex-row gap-4">
+            <div id="onboardStep1" class="flex-1 flex items-center gap-4 p-4 rounded-xl border border-slate-100 bg-white/60">
+              <span class="w-8 h-8 rounded-full bg-cyan-50 border border-cyan-200 text-cyan-600 font-code-lg flex items-center justify-center shrink-0">1</span>
+              <div class="flex-1">
+                <p class="font-body-md text-sm text-slate-700" data-i18n="dash.onboard_step1">Add your assets to the
+                  inventory</p>
+              </div>
+              <a href="/assets"
+                class="bg-slate-900 text-white hover:bg-slate-800 px-4 py-2 rounded-lg font-label-caps text-[10px] transition-all shrink-0"
+                data-i18n="dash.onboard_step1_btn">ADD ASSETS</a>
+            </div>
+            <div id="onboardStep2" class="flex-1 flex items-center gap-4 p-4 rounded-xl border border-slate-100 bg-white/60">
+              <span class="w-8 h-8 rounded-full bg-cyan-50 border border-cyan-200 text-cyan-600 font-code-lg flex items-center justify-center shrink-0">2</span>
+              <div class="flex-1">
+                <p class="font-body-md text-sm text-slate-700" data-i18n="dash.onboard_step2">Run your first posture
+                  scan</p>
+              </div>
+              <button id="onboardRunBtn"
+                class="bg-slate-900 text-white hover:bg-slate-800 px-4 py-2 rounded-lg font-label-caps text-[10px] transition-all shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
+                data-i18n="dash.onboard_step2_btn">RUN SCAN</button>
+            </div>
+          </div>
+        </section>
         <!-- Executive Summary KPIs (Bento Grid) -->
         <section class="grid grid-cols-1 md:grid-cols-3 gap-6">
           <!-- KPI 1 -->
@@ -405,8 +362,15 @@
             <div
               class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-cyan-400 to-blue-500 opacity-0 group-hover:opacity-100 transition-opacity">
             </div>
-            <h2 class="font-label-caps text-label-caps text-slate-500 mb-2" data-i18n="dash.posture_title">SECURITY
-              POSTURE SCORE</h2>
+            <div class="flex items-center justify-between mb-2">
+              <h2 class="font-label-caps text-label-caps text-slate-500" data-i18n="dash.posture_title">SECURITY
+                POSTURE SCORE</h2>
+              <a href="/intel"
+                class="flex items-center gap-1 text-slate-400 hover:text-cyan-600 transition-colors font-label-caps text-[10px]"
+                title="Security Posture" data-i18n-title="dash.posture_link">
+                <span class="material-symbols-outlined text-[16px]">arrow_outward</span>
+              </a>
+            </div>
             <div class="flex items-baseline gap-2">
               <span id="postureScore"
                 class="font-display-lg text-display-lg text-transparent bg-clip-text bg-gradient-to-r from-cyan-600 to-blue-700">—</span>
@@ -420,6 +384,16 @@
               </div>
             </div>
             <p id="postureNote" class="font-code-sm text-[11px] text-slate-400 mt-2">—</p>
+            <!-- Score trend over past runs (hidden until >=2 runs) -->
+            <div id="postureTrend" class="hidden mt-3">
+              <div class="flex items-center justify-between mb-1">
+                <span class="font-label-caps text-[9px] text-slate-400 tracking-wider"
+                  data-i18n="dash.trend_label">SCORE TREND</span>
+                <span id="postureTrendDelta" class="font-code-sm text-[10px] font-semibold"></span>
+              </div>
+              <svg id="postureTrendSvg" viewBox="0 0 100 24" preserveAspectRatio="none"
+                class="w-full h-6 overflow-visible"></svg>
+            </div>
             <!-- Posture scan progress (hidden until scan runs) -->
             <div id="psProgressWrap" class="hidden mt-3">
               <div class="flex items-center justify-between mb-1.5">
@@ -445,15 +419,43 @@
             <div
               class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-400 to-indigo-500 opacity-0 group-hover:opacity-100 transition-opacity">
             </div>
-            <h2 class="font-label-caps text-label-caps text-slate-500 mb-2" data-i18n="dash.verified_title">VERIFIED
-              ASSETS</h2>
+            <div class="flex items-center justify-between mb-2">
+              <h2 class="font-label-caps text-label-caps text-slate-500 flex items-center gap-1.5">
+                <span data-i18n="dash.verified_title">ASSETS SCANNED</span>
+                <span class="relative group/info inline-flex items-center">
+                  <span
+                    class="material-symbols-outlined text-[14px] text-slate-400 hover:text-cyan-600 cursor-help">info</span>
+                  <span
+                    class="pointer-events-none absolute top-full left-0 mt-2 w-64 p-3 rounded-lg bg-slate-900 text-slate-100 text-[11px] leading-relaxed font-body-md normal-case tracking-normal opacity-0 group-hover/info:opacity-100 transition-opacity duration-200 z-50 shadow-xl"
+                    data-i18n="dash.verified_tooltip">Assets included in the last posture scan, out of all enabled
+                    assets in the inventory.</span>
+                </span>
+              </h2>
+              <a href="/assets"
+                class="flex items-center gap-1 text-slate-400 hover:text-cyan-600 transition-colors"
+                title="Asset Inventory" data-i18n-title="top.asset_registry">
+                <span class="material-symbols-outlined text-[16px]">arrow_outward</span>
+              </a>
+            </div>
             <div class="flex items-baseline gap-2">
               <span id="kpiAssets" class="font-display-lg text-display-lg text-slate-900">0</span>
-              <span
-                class="material-symbols-outlined text-blue-500 text-sm bg-blue-50 p-1 rounded-full">trending_up</span>
+              <span id="kpiAssetsTotal" class="font-code-lg text-code-lg text-slate-400">/0</span>
+              <span id="kpiAssetsTrend"
+                class="material-symbols-outlined text-slate-400 text-sm bg-slate-50 p-1 rounded-full">trending_flat</span>
             </div>
-            <p class="font-code-sm text-code-sm text-blue-600 mt-2 flex items-center gap-1">
+            <!-- Copertura: asset scansionati / asset abilitati -->
+            <div class="w-full bg-slate-100 h-1.5 mt-4 rounded-full overflow-hidden">
+              <div id="kpiCoverageBar"
+                class="bg-gradient-to-r from-blue-400 to-indigo-500 h-full transition-all duration-700"
+                style="width:0%"></div>
+            </div>
+            <p class="font-code-sm text-[11px] text-blue-600 mt-2 flex items-center gap-1">
               <span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span> <span id="kpiAssetsDelta">awaiting scan</span>
+            </p>
+            <p id="kpiExcluded" class="hidden font-code-sm text-[11px] text-slate-500 mt-1">
+              <a href="/assets" class="hover:text-cyan-600 transition-colors inline-flex items-center gap-1">
+                <span class="material-symbols-outlined text-[13px]">block</span><span id="kpiExcludedText"></span>
+              </a>
             </p>
           </div>
           <!-- KPI 3 -->
@@ -462,15 +464,37 @@
             <div
               class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-red-400 to-rose-500 opacity-0 group-hover:opacity-100 transition-opacity">
             </div>
-            <h2 class="font-label-caps text-label-caps text-error mb-2 flex items-center gap-2">
-              <span class="w-2 h-2 rounded-full bg-error animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.4)]"></span>
-              <span data-i18n="dash.vulns_title">ACTIVE VULNERABILITIES</span>
-            </h2>
-            <div class="flex items-baseline gap-2">
-              <span id="kpiVulns" class="font-display-lg text-display-lg text-error">0</span>
+            <div class="flex items-center justify-between mb-2">
+              <h2 class="font-label-caps text-label-caps text-slate-500 flex items-center gap-2">
+                <span id="kpiVulnsDot" class="w-2 h-2 rounded-full bg-slate-300"></span>
+                <span data-i18n="dash.vulns_title">ACTIVE VULNERABILITIES</span>
+              </h2>
+              <a href="/intel"
+                class="flex items-center gap-1 text-slate-400 hover:text-cyan-600 transition-colors"
+                title="Security Posture" data-i18n-title="dash.posture_link">
+                <span class="material-symbols-outlined text-[16px]">arrow_outward</span>
+              </a>
             </div>
-            <p class="font-code-sm text-code-sm text-error/80 mt-2 bg-error/5 py-1 px-2 rounded inline-block"
-              data-i18n="dash.vulns_triage">Requires immediate triage</p>
+            <div class="flex items-baseline gap-2">
+              <span id="kpiVulns" class="font-display-lg text-display-lg text-slate-900">0</span>
+              <span id="kpiVulnsTrend"
+                class="material-symbols-outlined text-slate-400 text-sm bg-slate-50 p-1 rounded-full">trending_flat</span>
+            </div>
+            <p id="kpiVulnsTotal" class="hidden font-code-sm text-[11px] text-slate-400 mt-1"></p>
+            <!-- Breakdown severita' (dall'ultima posture run) -->
+            <div id="kpiSevChips" class="hidden flex items-center gap-1.5 mt-3 flex-wrap">
+              <span id="sevChipC"
+                class="font-label-caps text-[9px] px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200">C 0</span>
+              <span id="sevChipH"
+                class="font-label-caps text-[9px] px-2 py-0.5 rounded-full bg-orange-50 text-orange-700 border border-orange-200">H 0</span>
+              <span id="sevChipM"
+                class="font-label-caps text-[9px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">M 0</span>
+              <span id="sevChipL"
+                class="font-label-caps text-[9px] px-2 py-0.5 rounded-full bg-slate-50 text-slate-600 border border-slate-200">L 0</span>
+            </div>
+            <p id="kpiVulnsStatus"
+              class="font-code-sm text-[11px] text-slate-500 bg-slate-50 mt-2 py-1 px-2 rounded inline-block"
+              data-i18n="dash.verified_waiting">awaiting scan</p>
           </div>
         </section>
         <!-- Input & Intelligence Section -->
@@ -493,6 +517,15 @@
               <div class="flex flex-col gap-3">
                 <span class="font-code-sm text-code-sm text-slate-400" data-i18n="dash.query_hint">Press ENTER to
                   initiate scan sequence</span>
+                <div class="flex items-center gap-2 flex-wrap">
+                  <span class="font-label-caps text-[9px] text-slate-500 tracking-wider" data-i18n="dash.try">TRY:</span>
+                  <button type="button" data-example="OpenSSH 9.6"
+                    class="query-example font-code-sm text-[11px] text-slate-600 bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-full hover:border-cyan-300 hover:text-cyan-700 hover:bg-cyan-50 transition-colors">OpenSSH 9.6</button>
+                  <button type="button" data-example="Notepad++ 7.8.1"
+                    class="query-example font-code-sm text-[11px] text-slate-600 bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-full hover:border-cyan-300 hover:text-cyan-700 hover:bg-cyan-50 transition-colors">Notepad++ 7.8.1</button>
+                  <button type="button" data-example="PuTTY 0.70"
+                    class="query-example font-code-sm text-[11px] text-slate-600 bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-full hover:border-cyan-300 hover:text-cyan-700 hover:bg-cyan-50 transition-colors">PuTTY 0.70</button>
+                </div>
                 <label class="flex items-center gap-2 cursor-pointer select-none">
                   <input type="checkbox" id="deepProbe" class="peer sr-only" />
                   <span
@@ -544,6 +577,41 @@
                 root@soc-cmd:~# <span class="w-2 h-4 bg-cyan-400 ml-2 animate-pulse"></span>
               </p>
             </div>
+            <!-- Identification pipeline (compact strip, merged from old panel) -->
+            <div class="border-t border-slate-800 bg-[#1a1a2e] px-4 py-2.5 flex items-center justify-between gap-2 relative z-10">
+              <div id="pipe-parse" class="flex items-center gap-2 relative z-10 opacity-40">
+                <div class="w-6 h-6 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center shrink-0">
+                  <span class="material-symbols-outlined text-slate-500 text-[13px]">data_object</span>
+                </div>
+                <div class="flex flex-col">
+                  <span class="font-code-sm text-[10px] text-slate-400 leading-tight" data-i18n="dash.pipe_parse">Parsing
+                    Input</span>
+                  <span class="font-label-caps text-[8px] text-slate-500 pipe-status leading-tight"></span>
+                </div>
+              </div>
+              <span class="material-symbols-outlined text-slate-700 text-[14px] shrink-0">chevron_right</span>
+              <div id="pipe-osint" class="flex items-center gap-2 relative z-10 opacity-40">
+                <div class="w-6 h-6 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center shrink-0">
+                  <span class="material-symbols-outlined text-slate-500 text-[13px]">travel_explore</span>
+                </div>
+                <div class="flex flex-col">
+                  <span class="font-code-sm text-[10px] text-slate-400 leading-tight" data-i18n="dash.pipe_osint">OSINT
+                    Correlation</span>
+                  <span class="font-label-caps text-[8px] text-slate-500 pipe-status leading-tight"></span>
+                </div>
+              </div>
+              <span class="material-symbols-outlined text-slate-700 text-[14px] shrink-0">chevron_right</span>
+              <div id="pipe-detect" class="flex items-center gap-2 relative z-10 opacity-40">
+                <div class="w-6 h-6 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center shrink-0">
+                  <span class="material-symbols-outlined text-slate-500 text-[13px]">troubleshoot</span>
+                </div>
+                <div class="flex flex-col">
+                  <span class="font-code-sm text-[10px] text-slate-400 leading-tight" data-i18n="dash.pipe_detect">Active
+                    Detection</span>
+                  <span class="font-label-caps text-[8px] text-slate-500 pipe-status leading-tight"></span>
+                </div>
+              </div>
+            </div>
           </div>
         </section>
         <!-- AI Scan progress bar (same style as intel page) -->
@@ -562,8 +630,16 @@
         <section class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
           <!-- Colonna A: Detected Products Network -->
           <div class="lg:col-span-2 neural-panel p-6 rounded-2xl relative overflow-hidden group transition-all">
-            <h2 class="font-label-caps text-label-caps text-slate-500 mb-6" data-i18n="dash.network_title">DETECTED
-              PRODUCTS NETWORK</h2>
+            <h2 class="font-label-caps text-label-caps text-slate-500 mb-6 flex items-center gap-1.5">
+              <span data-i18n="dash.network_title">DETECTED PRODUCTS NETWORK</span>
+              <span class="relative group/info inline-flex items-center">
+                <span
+                  class="material-symbols-outlined text-[16px] text-slate-400 hover:text-cyan-600 cursor-help">info</span>
+                <span
+                  class="pointer-events-none absolute top-full left-0 mt-2 w-96 max-w-[90vw] p-3 rounded-lg bg-slate-900 text-slate-100 text-[11px] leading-relaxed font-body-md normal-case tracking-normal opacity-0 group-hover/info:opacity-100 transition-opacity duration-200 z-50 shadow-xl"
+                  data-i18n="dash.network_tooltip">How the dependency graph is computed.</span>
+              </span>
+            </h2>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-10 items-center">
               <div class="flex items-center justify-center w-full">
                 <div id="graph-canvas"
@@ -572,7 +648,7 @@
               </div>
               <div id="graph-legend" class="w-full space-y-4 transition-opacity duration-500 ease-in-out">
                 <div
-                  class="flex items-center justify-center h-full min-h-[12rem] text-slate-300 font-code-sm text-code-sm text-center px-4"
+                  class="flex items-center justify-center h-full min-h-[12rem] text-slate-400 font-code-sm text-code-sm text-center px-4"
                   data-i18n="dash.network_hint">Run a scan to map the product dependency graph.</div>
               </div>
             </div>
@@ -646,7 +722,7 @@
                     class="material-symbols-outlined text-[14px] text-cyan-400 animate-spin hidden">progress_activity</span>
                   <span id="authTotal">0</span>&nbsp;<span data-i18n="dash.authn_total">total assets</span>
                 </p>
-                <span id="stat-checking-label" class="font-label-caps text-[9px] text-slate-300 hidden">CHECKING…</span>
+                <span id="stat-checking-label" class="font-label-caps text-[10px] text-slate-500 hidden">CHECKING…</span>
               </div>
             </div>
           </div>
@@ -656,44 +732,18 @@
 
         <!-- Console & Assets Row -->
         <section class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <!-- Identification Workflow -->
+          <!-- Critical Findings (real data from latest posture run) -->
           <div class="neural-panel rounded-2xl p-6 flex flex-col h-80 relative overflow-hidden">
-            <h3 class="font-label-caps text-label-caps text-slate-500 mb-6" data-i18n="dash.pipeline_title">
-              IDENTIFICATION PIPELINE</h3>
-            <div class="flex-1 flex flex-col justify-between gap-4 relative">
-              <div
-                class="absolute left-[15px] top-4 bottom-4 w-0.5 bg-gradient-to-b from-slate-200 via-slate-100 to-slate-100 z-0"
-                id="pipe-line"></div>
-              <div id="pipe-parse" class="flex items-center gap-4 relative z-10 opacity-40">
-                <div class="w-8 h-8 rounded-full bg-slate-50 border border-slate-200 flex items-center justify-center">
-                  <span class="material-symbols-outlined text-slate-400 text-sm">data_object</span>
-                </div>
-                <div class="flex flex-col">
-                  <span class="font-code-sm text-code-sm text-slate-400" data-i18n="dash.pipe_parse">Parsing
-                    Input</span>
-                  <span class="font-label-caps text-[9px] text-slate-300 pipe-status"></span>
-                </div>
-              </div>
-              <div id="pipe-osint" class="flex items-center gap-4 relative z-10 opacity-40">
-                <div class="w-8 h-8 rounded-full bg-slate-50 border border-slate-200 flex items-center justify-center">
-                  <span class="material-symbols-outlined text-slate-400 text-sm">travel_explore</span>
-                </div>
-                <div class="flex flex-col">
-                  <span class="font-code-sm text-code-sm text-slate-400" data-i18n="dash.pipe_osint">OSINT
-                    Correlation</span>
-                  <span class="font-label-caps text-[9px] text-slate-300 pipe-status"></span>
-                </div>
-              </div>
-              <div id="pipe-detect" class="flex items-center gap-4 relative z-10 opacity-40">
-                <div class="w-8 h-8 rounded-full bg-slate-50 border border-slate-200 flex items-center justify-center">
-                  <span class="material-symbols-outlined text-slate-400 text-sm">troubleshoot</span>
-                </div>
-                <div class="flex flex-col">
-                  <span class="font-code-sm text-code-sm text-slate-400" data-i18n="dash.pipe_detect">Active
-                    Detection</span>
-                  <span class="font-label-caps text-[9px] text-slate-300 pipe-status"></span>
-                </div>
-              </div>
+            <div class="flex justify-between items-center mb-6">
+              <h3 class="font-label-caps text-label-caps text-slate-500" data-i18n="dash.findings_title">CRITICAL
+                FINDINGS</h3>
+              <a href="/intel"
+                class="text-cyan-600 bg-cyan-50 px-3 py-1 rounded-full font-label-caps text-label-caps hover:bg-cyan-100 transition-colors"
+                data-i18n="dash.inventory_viewall">VIEW ALL</a>
+            </div>
+            <div id="criticalFindings" class="flex-1 overflow-y-auto pr-2 space-y-3">
+              <div class="flex items-center justify-center h-full text-slate-400 font-code-sm text-code-sm"
+                data-i18n="dash.inventory_loading">Loading…</div>
             </div>
           </div>
           <!-- Asset Inventory List -->
@@ -706,86 +756,15 @@
                 data-i18n="dash.inventory_viewall">VIEW ALL</a>
             </div>
             <div id="assetList" class="flex-1 overflow-y-auto pr-2 space-y-3">
-              <div class="flex items-center justify-center h-full text-slate-300 font-code-sm text-code-sm"
+              <div class="flex items-center justify-center h-full text-slate-400 font-code-sm text-code-sm"
                 data-i18n="dash.inventory_loading">Loading inventory…</div>
-            </div>
-          </div>
-        </section>
-        <!-- Alerts Row -->
-        <section>
-          <h3 class="font-label-caps text-label-caps text-slate-500 mb-6" data-i18n="dash.alerts_title">CRITICAL
-            INTELLIGENCE ALERTS</h3>
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div
-              class="neural-panel p-5 rounded-2xl flex items-start gap-4 relative overflow-hidden opacity-50 grayscale pointer-events-none select-none"
-              aria-disabled="true">
-              <div class="absolute left-0 top-0 bottom-0 w-1.5 bg-gradient-to-b from-rose-400 to-red-500"></div>
-              <div
-                class="w-12 h-12 rounded-xl bg-rose-50 border border-rose-100 flex items-center justify-center shrink-0 shadow-sm z-10">
-                <span class="material-symbols-outlined text-rose-500">gavel</span>
-              </div>
-              <div class="flex-1 z-10">
-                <div class="flex justify-between items-start mb-2">
-                  <h4 class="font-code-lg text-code-lg text-slate-900 font-semibold" data-i18n="alert.cve_title">
-                    CVE-2023-4567 Detected</h4>
-                  <span
-                    class="font-label-caps text-[10px] text-slate-500 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full"
-                    data-i18n="common.disabled">DISABLED</span>
-                </div>
-                <p class="font-body-md text-body-md text-slate-600 text-sm mb-4 leading-relaxed"
-                  data-i18n="alert.cve_body">Unauthorized access vector identified on SRV-PROD-01 via Python library
-                  vulnerability.</p>
-                <button disabled
-                  class="font-label-caps text-label-caps text-slate-400 border border-slate-200 bg-slate-50 px-4 py-1.5 rounded-lg shadow-sm cursor-not-allowed"
-                  data-i18n="alert.cve_btn">INITIATE ISOLATION</button>
-              </div>
-            </div>
-            <div
-              class="neural-panel p-5 rounded-2xl flex items-start gap-4 relative overflow-hidden opacity-50 grayscale pointer-events-none select-none"
-              aria-disabled="true">
-              <div class="absolute left-0 top-0 bottom-0 w-1.5 bg-gradient-to-b from-cyan-400 to-blue-500"></div>
-              <div
-                class="w-12 h-12 rounded-xl bg-cyan-50 border border-cyan-100 flex items-center justify-center shrink-0 shadow-sm z-10">
-                <span class="material-symbols-outlined text-cyan-600">policy</span>
-              </div>
-              <div class="flex-1 z-10">
-                <div class="flex justify-between items-start mb-2">
-                  <h4 class="font-code-lg text-code-lg text-slate-900 font-semibold" data-i18n="alert.drift_title">
-                    Configuration Drift</h4>
-                  <span
-                    class="font-label-caps text-[10px] text-slate-500 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full"
-                    data-i18n="common.disabled">DISABLED</span>
-                </div>
-                <p class="font-body-md text-body-md text-slate-600 text-sm mb-4 leading-relaxed"
-                  data-i18n="alert.drift_body">GATEWAY-MAIN configuration checksum mismatch detected against baseline.
-                </p>
-                <button disabled
-                  class="font-label-caps text-label-caps text-slate-400 border border-slate-200 bg-slate-50 px-4 py-1.5 rounded-lg shadow-sm cursor-not-allowed"
-                  data-i18n="alert.drift_btn">REVIEW DIFF</button>
-              </div>
             </div>
           </div>
         </section>
       </div>
     </main>
   </div>
-  <!-- BottomNavBar (Mobile) -->
-  <nav
-    class="md:hidden fixed bottom-6 left-4 right-4 flex justify-around items-center px-2 py-2 bg-white/90 backdrop-blur-xl border border-slate-200/50 rounded-2xl shadow-2xl z-50">
-    <a class="flex flex-col items-center justify-center text-slate-400 p-3 hover:text-cyan-600 transition-all" href="#">
-      <span class="material-symbols-outlined">notifications_active</span>
-    </a>
-    <a class="flex flex-col items-center justify-center text-slate-400 p-3 hover:text-cyan-600 transition-all" href="#">
-      <span class="material-symbols-outlined">terminal</span>
-    </a>
-    <a class="flex flex-col items-center justify-center bg-slate-900 text-cyan-400 shadow-xl rounded-xl p-3 -mt-6 border-4 border-white"
-      href="/audit">
-      <span class="material-symbols-outlined">fact_check</span>
-    </a>
-    <a class="flex flex-col items-center justify-center text-slate-400 p-3 hover:text-cyan-600 transition-all" href="#">
-      <span class="material-symbols-outlined">settings</span>
-    </a>
-  </nav>
+  {% include 'partials/bottomnav.html' %}
   <!-- Backend wiring: collega il design al motore di scansione (/api/scan, /api/assets) -->
   <script>
     const $ = (id) => document.getElementById(id);
@@ -863,15 +842,6 @@
       graphLegend.innerHTML = graphLoaderLegend();
     }
 
-    // Relazioni note fra librerie: archi extra fra dipendenze per arricchire il grafo.
-    const DEP_RELATIONS = [
-      ['openssl', 'zlib'], ['openssl', 'pcre'], ['openssl', 'pam'],
-      ['openssl', 'libxml2'], ['pcre', 'zlib'], ['zlib', 'libffi'],
-      ['zlib', 'sqlite'], ['libffi', 'sqlite'], ['v8', 'libuv'],
-      ['libuv', 'zlib'], ['apr', 'pcre'], ['jemalloc', 'lua'],
-      ['readline', 'zlib'], ['pam', 'openssl'],
-    ];
-
     // Wrapper con fade-out -> swap -> fade-in.
     let graphFadeTimer = null;
     function buildGraph(t) {
@@ -889,10 +859,10 @@
       graphCanvas.innerHTML = '';
       if (!t || !t.product) {
         graphLegend.innerHTML =
-          `<div class="flex items-center justify-center h-full text-slate-300 font-code-sm text-code-sm text-center px-4">${i18n.t('dash.graph_empty')}</div>`;
+          `<div class="flex items-center justify-center h-full text-slate-400 font-code-sm text-code-sm text-center px-4">${i18n.t('dash.graph_empty')}</div>`;
         return;
       }
-      const deps = t.deps || t.dependencies || [];
+      const deps = t.deps || [];
       const cx = 50, cy = 50, R = 40; // percentuali nel box quadrato
 
       // Posizioni dei nodi dipendenza su un cerchio.
@@ -916,19 +886,18 @@
       pos.forEach((p) => line('50%', '50%', p.x + '%', p.y + '%',
         { stroke: '#cbd5e1', 'stroke-width': '2', class: 'opacity-70' }));
 
-      // 2. Archi inter-dipendenza: relazioni note fra le librerie presenti.
+      // 2. Archi inter-dipendenza: solo collegamenti REALI passati dal backend
+      //    (coppie di pacchetti dove uno linka l'altro). Nessuna relazione
+      //    presunta: assenti -> nessun arco.
       let relCount = 0;
-      for (let i = 0; i < deps.length; i++) {
-        for (let j = i + 1; j < deps.length; j++) {
-          const related = DEP_RELATIONS.some(([a, b]) =>
-            (a === deps[i] && b === deps[j]) || (a === deps[j] && b === deps[i]));
-          if (related) {
-            relCount++;
-            line(pos[i].x + '%', pos[i].y + '%', pos[j].x + '%', pos[j].y + '%',
-              { stroke: '#a5b4fc', 'stroke-width': '1.5', 'stroke-dasharray': '4 3', class: 'opacity-60' });
-          }
-        }
-      }
+      const edges = t.edges || [];
+      edges.forEach(([a, b]) => {
+        const i = deps.indexOf(a), j = deps.indexOf(b);
+        if (i < 0 || j < 0) return;
+        relCount++;
+        line(pos[i].x + '%', pos[i].y + '%', pos[j].x + '%', pos[j].y + '%',
+          { stroke: '#a5b4fc', 'stroke-width': '1.5', 'stroke-dasharray': '4 3', class: 'opacity-60' });
+      });
       graphCanvas.appendChild(svg);
 
       // Nodi dipendenza.
@@ -978,19 +947,31 @@
           <div class="w-3 h-3 rounded-full ${c.dot}"></div>
           <span class="font-code-sm text-code-sm text-slate-600 font-medium">${d}</span>
         </div>
-        <span class="font-code-sm text-code-sm font-semibold ${c.chip} px-2 py-0.5 rounded ${c.text}">${i18n.t('dash.legend_dependency')}</span>
+        <span class="font-code-sm text-code-sm font-semibold ${c.chip} px-2 py-0.5 rounded ${c.text}">${t.demo ? i18n.t('dash.legend_dependency') : i18n.t('dash.legend_runtime_dep')}</span>
       </div>`;
       }).join('');
       if (!deps.length) {
-        rows += `<p class="font-code-sm text-[11px] text-slate-400 px-2">${i18n.t('dash.legend_no_deps')}</p>`;
+        rows += `<p class="font-code-sm text-[11px] text-slate-400 px-2 leading-relaxed">${i18n.t('dash.legend_no_deps')}</p>`;
       } else {
-        rows += `
+        // Provenienza: nodi reali derivati dal linkage runtime sugli asset.
+        if (!t.demo) {
+          rows += `
       <div class="pt-3 mt-1 border-t border-slate-100/70 flex items-center justify-between px-2">
+        <span class="font-code-sm text-[11px] text-slate-400 flex items-center gap-1.5">
+          <span class="material-symbols-outlined text-[13px] text-emerald-500">link</span> ${i18n.t('dash.legend_source')}
+        </span>
+        <span class="font-code-sm text-[11px] font-semibold text-emerald-600">${i18n.t('dash.legend_source_val', { n: deps.length, a: t.deps_assets || 0 })}</span>
+      </div>`;
+        }
+        if (relCount > 0) {
+          rows += `
+      <div class="${t.demo ? 'pt-3 mt-1 border-t border-slate-100/70 ' : 'pt-2 '}flex items-center justify-between px-2">
         <span class="font-code-sm text-[11px] text-slate-400 flex items-center gap-2">
           <span class="inline-block w-4 border-t border-dashed border-indigo-300"></span> ${i18n.t('dash.legend_links')}
         </span>
         <span class="font-code-sm text-[11px] font-semibold text-indigo-500">${relCount}</span>
       </div>`;
+        }
       }
       graphLegend.innerHTML = rows;
     }
@@ -1051,22 +1032,41 @@
         ? `<span class="px-2.5 py-1 border border-cyan-100 bg-cyan-50 text-cyan-700 font-label-caps text-[10px] rounded-full">${t('common.authenticated')}</span>`
         : `<span class="px-2.5 py-1 border border-slate-100 bg-slate-50 text-slate-500 font-label-caps text-[10px] rounded-full">${t('common.not_required')}</span>`;
     }
+    // Stato health per-asset (id -> 'checking'|'unreachable'|'available'|'ssh_ok'|'ssh_fail').
+    const dashHealth = {};
+    const _HD_STYLE = {
+      checking: ['bg-slate-200 animate-pulse', 'dash.h_checking'],
+      unreachable: ['bg-rose-500', 'dash.h_unreachable'],
+      available: ['bg-emerald-500', 'dash.h_reachable'],
+      ssh_ok: ['bg-cyan-500', 'dash.h_ssh_ok'],
+      ssh_fail: ['bg-orange-400', 'dash.h_ssh_fail'],
+    };
+    function healthDot(index) {
+      const [cls, key] = _HD_STYLE[dashHealth[index] || 'checking'];
+      return `<span id="dash-hd-${index}" class="w-2 h-2 rounded-full ${cls} shrink-0" title="${t(key)}"></span>`;
+    }
     function assetRow(a) {
       const icon = a.auth_required ? 'dns' : 'router';
       const hover = a.auth_required ? 'hover:border-cyan-200' : 'hover:border-blue-200';
       const iconHover = a.auth_required ? 'group-hover:bg-cyan-50 group-hover:text-cyan-600' : 'group-hover:bg-blue-50 group-hover:text-blue-600';
+      // Asset disabilitato (enabled === false): escluso dalle scansioni -> riga attenuata + badge.
+      const off = a.enabled === false;
+      const offCls = off ? ' opacity-50' : '';
+      const scanBadge = off
+        ? `<span class="px-2.5 py-1 border border-slate-200 bg-slate-100 text-slate-500 font-label-caps text-[10px] rounded-full">${t('assets.scan_off')}</span>`
+        : '';
       return `
-      <div class="flex items-center justify-between p-3 border border-slate-100 bg-white/60 hover:bg-white ${hover} transition-all group rounded-xl">
+      <div class="flex items-center justify-between p-3 border border-slate-100 bg-white/60 hover:bg-white ${hover} transition-all group rounded-xl${offCls}">
         <div class="flex items-center gap-4">
           <div class="w-10 h-10 rounded-lg bg-slate-50 flex items-center justify-center transition-colors ${iconHover}">
             <span class="material-symbols-outlined text-slate-400">${icon}</span>
           </div>
           <div>
-            <div class="font-code-sm text-code-sm text-slate-900 font-semibold">${a.ip}</div>
-            <div class="font-label-caps text-[10px] text-slate-400 mt-0.5">${a.username ? a.username.toUpperCase() : 'NO-CRED'}</div>
+            <div class="font-code-sm text-code-sm text-slate-900 font-semibold flex items-center gap-2">${healthDot(a.index)}${a.ip}</div>
+            <div class="font-label-caps text-[10px] text-slate-500 mt-0.5">${a.username ? a.username.toUpperCase() : 'NO-CRED'}</div>
           </div>
         </div>
-        ${authBadge(a.auth_required)}
+        <div class="flex items-center gap-2">${scanBadge}${authBadge(a.auth_required)}</div>
       </div>`;
     }
     function updateAuthStats(list) {
@@ -1097,18 +1097,77 @@
       _dashStats.pending = assets.length;
       _renderDashStats();
       for (const a of assets) {
+        let state = 'unreachable';
         try {
           const r = await fetch('/api/asset/health?host=' + encodeURIComponent(a.ip) + '&index=' + a.index);
           const d = await r.json();
-          if (!d.reachable) _dashStats.not_available++;
-          else if (d.ssh_ok === null) _dashStats.available++;
-          else if (d.ssh_ok) _dashStats.ssh_ok++;
-          else _dashStats.ssh_fail++;
+          if (!d.reachable) { _dashStats.not_available++; state = 'unreachable'; }
+          else if (d.ssh_ok === null) { _dashStats.available++; state = 'available'; }
+          else if (d.ssh_ok) { _dashStats.ssh_ok++; state = 'ssh_ok'; }
+          else { _dashStats.ssh_fail++; state = 'ssh_fail'; }
         } catch (_) {
           _dashStats.not_available++;
         }
+        dashHealth[a.index] = state;
+        const dot = $('dash-hd-' + a.index);
+        if (dot) dot.outerHTML = healthDot(a.index);
         _dashStats.pending--;
         _renderDashStats();
+      }
+    }
+
+    // --- KPI "Active vulnerabilities": severita' + stato + trend -------------
+    // c/h/m/l = somma sev_* dall'ultima posture run; total = CVE totali;
+    // prevTotal = total_vulns della run precedente (trend, colori invertiti).
+    const _vulnsKpi = { c: null, h: 0, m: 0, l: 0, total: 0, prevTotal: null };
+    function updateVulnsKpi() {
+      const k = _vulnsKpi;
+      if (k.c === null) return;
+      const urgent = k.c + k.h;
+      const num = $('kpiVulns');
+      num.textContent = urgent.toLocaleString();
+      num.className = 'font-display-lg text-display-lg ' +
+        (k.c > 0 ? 'text-error' : k.h > 0 ? 'text-orange-500'
+          : k.total > 0 ? 'text-slate-900' : 'text-emerald-600');
+      const tot = $('kpiVulnsTotal');
+      tot.textContent = t('dash.vulns_of_total', { n: k.total.toLocaleString() });
+      tot.classList.remove('hidden');
+      $('sevChipC').textContent = 'C ' + k.c;
+      $('sevChipH').textContent = 'H ' + k.h;
+      $('sevChipM').textContent = 'M ' + k.m;
+      $('sevChipL').textContent = 'L ' + k.l;
+      $('kpiSevChips').classList.remove('hidden');
+      const dot = $('kpiVulnsDot');
+      const st = $('kpiVulnsStatus');
+      st.removeAttribute('data-i18n');
+      const stBase = 'font-code-sm text-[11px] mt-2 py-1 px-2 rounded inline-block ';
+      if (k.c > 0) {
+        dot.className = 'w-2 h-2 rounded-full bg-error animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.4)]';
+        st.className = stBase + 'text-error/80 bg-error/5';
+        st.textContent = t('dash.vulns_triage');
+      } else if (k.h > 0) {
+        dot.className = 'w-2 h-2 rounded-full bg-orange-400';
+        st.className = stBase + 'text-orange-700 bg-orange-50';
+        st.textContent = t('dash.vulns_status_high');
+      } else if (k.total > 0) {
+        dot.className = 'w-2 h-2 rounded-full bg-slate-300';
+        st.className = stBase + 'text-slate-500 bg-slate-50';
+        st.textContent = t('dash.vulns_status_ok');
+      } else {
+        dot.className = 'w-2 h-2 rounded-full bg-emerald-400';
+        st.className = stBase + 'text-emerald-700 bg-emerald-50';
+        st.textContent = t('dash.vulns_status_none');
+      }
+      // Trend invertito: meno vulnerabilita' = verde.
+      if (k.prevTotal !== null) {
+        const d = k.total - k.prevTotal;
+        const el = $('kpiVulnsTrend');
+        const [icon, cls] = d > 0 ? ['trending_up', 'text-rose-500 bg-rose-50']
+          : d < 0 ? ['trending_down', 'text-emerald-500 bg-emerald-50']
+            : ['trending_flat', 'text-slate-400 bg-slate-50'];
+        el.textContent = icon;
+        el.className = 'material-symbols-outlined text-sm p-1 rounded-full ' + cls;
+        el.title = t('dash.vs_prev', { d: (d >= 0 ? '+' : '') + d });
       }
     }
 
@@ -1131,6 +1190,7 @@
       postureEs.addEventListener('run', e => {
         total = JSON.parse(e.data).total_assets;
         count.textContent = `0/${total}`;
+        Object.assign(_vulnsKpi, { c: 0, h: 0, m: 0, l: 0, total: 0 });
       });
       postureEs.addEventListener('asset', e => {
         const a = JSON.parse(e.data);
@@ -1143,7 +1203,13 @@
         label.textContent = `Scanning assets… (${a.ip})`;
         $('postureScore').textContent = avg;
         $('postureBar').style.width = avg + '%';
-        $('kpiVulns').textContent = cves.toLocaleString();
+        // Aggiorna il KPI vulnerabilita' in streaming, severita' incluse.
+        _vulnsKpi.c += a.sev_critical || 0;
+        _vulnsKpi.h += a.sev_high || 0;
+        _vulnsKpi.m += a.sev_medium || 0;
+        _vulnsKpi.l += a.sev_low || 0;
+        _vulnsKpi.total = cves;
+        updateVulnsKpi();
       });
       postureEs.addEventListener('done', e => {
         const d = JSON.parse(e.data);
@@ -1153,10 +1219,16 @@
         $('postureScore').textContent = d.avg_score ?? '—';
         $('postureBar').style.width = (d.avg_score ?? 0) + '%';
         $('postureNote').textContent = `${d.total_vulns} CVEs · ${d.assets_scanned} asset${d.assets_scanned !== 1 ? 's' : ''} scanned`;
-        $('kpiVulns').textContent = (d.total_vulns || 0).toLocaleString();
+        _vulnsKpi.total = d.total_vulns || 0;
+        updateVulnsKpi();
         setTimeout(() => { wrap.classList.add('hidden'); bar.style.width = '0%'; }, 2500);
         btn.disabled = false;
         postureEs.close();
+        // Aggiorna findings, trend e onboarding con la run appena persistita.
+        _dashState.hasRun = true;
+        updateOnboarding();
+        loadLatestPosture();
+        loadPostureTrend();
       });
       postureEs.addEventListener('error', () => {
         label.textContent = 'Scan error';
@@ -1166,22 +1238,184 @@
     }
     $('psRunBtn').addEventListener('click', runPostureScan);
 
+    // --- KPI "Assets scanned": copertura + trend reale -----------------------
+    // scanned = asset nell'ultima posture run; enabled/disabled dall'inventario;
+    // prev = assets_scanned della run precedente (per la freccia di trend).
+    const _assetsKpi = { scanned: null, prev: null, enabled: null, disabled: 0 };
+    function updateAssetsKpi() {
+      const k = _assetsKpi;
+      if (k.scanned !== null) $('kpiAssets').textContent = k.scanned;
+      if (k.enabled !== null) {
+        $('kpiAssetsTotal').textContent = '/' + k.enabled;
+        if (k.scanned !== null) {
+          const pct = k.enabled ? Math.min(100, Math.round(k.scanned / k.enabled * 100)) : 0;
+          $('kpiCoverageBar').style.width = pct + '%';
+        }
+      }
+      if (k.scanned !== null && k.prev !== null) {
+        const d = k.scanned - k.prev;
+        const el = $('kpiAssetsTrend');
+        const [icon, cls] = d > 0 ? ['trending_up', 'text-emerald-500 bg-emerald-50']
+          : d < 0 ? ['trending_down', 'text-rose-500 bg-rose-50']
+            : ['trending_flat', 'text-slate-400 bg-slate-50'];
+        el.textContent = icon;
+        el.className = 'material-symbols-outlined text-sm p-1 rounded-full ' + cls;
+        el.title = t('dash.vs_prev', { d: (d >= 0 ? '+' : '') + d });
+      }
+      const ex = $('kpiExcluded');
+      if (k.disabled > 0) {
+        $('kpiExcludedText').textContent = t('dash.excluded_count', { n: k.disabled });
+        ex.classList.remove('hidden');
+      } else {
+        ex.classList.add('hidden');
+      }
+      // Riga descrittiva: solo a riposo (la scansione in-sessione la gestisce lei).
+      if (!runBtn.disabled && verifiedCount === 0 && k.scanned !== null && k.enabled !== null) {
+        $('kpiAssetsDelta').textContent = t('dash.scanned_count', { n: k.scanned, m: k.enabled });
+      }
+    }
+
+    // --- Onboarding (empty state guidato) -----------------------------------
+    // null = dato non ancora caricato; il banner appare solo a stato noto.
+    const _dashState = { hasAssets: null, hasRun: null };
+    function updateOnboarding() {
+      const ob = $('onboarding');
+      if (!ob || _dashState.hasAssets === null || _dashState.hasRun === null) return;
+      const show = !_dashState.hasAssets || !_dashState.hasRun;
+      ob.classList.toggle('hidden', !show);
+      if (!show) return;
+      $('onboardStep1').classList.toggle('opacity-40', _dashState.hasAssets);
+      $('onboardStep2').classList.toggle('opacity-40', !_dashState.hasAssets);
+      $('onboardRunBtn').disabled = !_dashState.hasAssets;
+    }
+    $('onboardRunBtn').addEventListener('click', () => {
+      runPostureScan();
+      document.querySelector('#psProgressWrap')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+
+    // --- Critical findings (dati reali dall'ultima posture run) -------------
+    let _lastRun = null;
+    const escHtml = (s) => String(s ?? '').replace(/[&<>"']/g,
+      (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    function renderCriticalFindings(run) {
+      const el = $('criticalFindings');
+      if (!el) return;
+      const assets = (run && run.posture_assets) || [];
+      if (!assets.length) {
+        el.innerHTML = `<div class="flex flex-col items-center justify-center h-full gap-2 text-slate-400 font-code-sm text-code-sm text-center px-4">
+          <span class="material-symbols-outlined text-slate-300">radar</span>${t('dash.findings_none_run')}</div>`;
+        return;
+      }
+      const rank = { CRITICAL: 0, HIGH: 1 };
+      const rows = [];
+      for (const a of assets) {
+        for (const f of (a.posture_findings || [])) {
+          const sev = (f.max_severity || '').toUpperCase();
+          if (sev in rank) rows.push({ ...f, sev, ip: a.ip });
+        }
+      }
+      rows.sort((x, y) => (rank[x.sev] - rank[y.sev]) || ((y.vuln_count || 0) - (x.vuln_count || 0)));
+      if (!rows.length) {
+        el.innerHTML = `<div class="flex flex-col items-center justify-center h-full gap-2 text-emerald-600 font-code-sm text-code-sm text-center px-4">
+          <span class="material-symbols-outlined">verified</span>${t('dash.findings_empty')}</div>`;
+        return;
+      }
+      const badge = (s) => s === 'CRITICAL'
+        ? `<span class="px-2 py-0.5 rounded-full font-label-caps text-[9px] bg-rose-50 text-rose-700 border border-rose-200 shrink-0">CRITICAL</span>`
+        : `<span class="px-2 py-0.5 rounded-full font-label-caps text-[9px] bg-orange-50 text-orange-700 border border-orange-200 shrink-0">HIGH</span>`;
+      el.innerHTML = rows.slice(0, 10).map((f) => `
+        <div class="flex items-center justify-between gap-3 p-3 border border-slate-100 bg-white/60 hover:bg-white hover:border-rose-200 transition-all rounded-xl">
+          <div class="min-w-0">
+            <div class="font-code-sm text-code-sm text-slate-900 font-semibold truncate">${escHtml(f.package)}
+              <span class="text-slate-400 font-normal">${escHtml(f.version || '')}</span></div>
+            <div class="font-label-caps text-[10px] text-slate-500 mt-0.5">${escHtml(f.ip)} · ${f.vuln_count || 0} CVE</div>
+          </div>
+          ${badge(f.sev)}
+        </div>`).join('');
+    }
+
+    // Data ultima run, formattata nella lingua corrente.
+    function fmtRunDate(iso) {
+      try {
+        const loc = (localStorage.getItem('lang') || 'en') === 'it' ? 'it-IT' : 'en-GB';
+        return new Date(iso).toLocaleString(loc, { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+      } catch (_) { return ''; }
+    }
+    let _runNote = null;   // {cves, assets, date} dall'ultima run persistita
+    function runNoteText() {
+      if (!_runNote) return '—';
+      let s = `${_runNote.cves} CVEs · ${_runNote.assets} asset`;
+      if (_runNote.date) s += ` · ${t('dash.last_scan', { d: _runNote.date })}`;
+      return s;
+    }
+
     // Load latest posture run on page load
-    (async function loadLatestPosture() {
+    async function loadLatestPosture() {
       try {
         const r = await fetch('/api/posture');
         const d = await r.json();
         const run = d.run || {};
+        _lastRun = run;
         const assets = run.posture_assets || [];
+        _dashState.hasRun = assets.length > 0;
+        updateOnboarding();
+        renderCriticalFindings(run);
         if (!assets.length) return;
         const avg = Math.round(assets.reduce((s, a) => s + (a.score || 0), 0) / assets.length);
         const cves = assets.reduce((s, a) => s + (a.total_vulns || 0), 0);
+        _runNote = { cves, assets: assets.length, date: run.created_at ? fmtRunDate(run.created_at) : '' };
         $('postureScore').textContent = avg;
         $('postureBar').style.width = avg + '%';
-        $('postureNote').textContent = `${cves} CVEs · ${assets.length} asset${assets.length !== 1 ? 's' : ''} scanned`;
-        $('kpiVulns').textContent = cves.toLocaleString();
+        $('postureNote').textContent = runNoteText();
+        const sev = assets.reduce((s, a) => {
+          s.c += a.sev_critical || 0; s.h += a.sev_high || 0;
+          s.m += a.sev_medium || 0; s.l += a.sev_low || 0;
+          return s;
+        }, { c: 0, h: 0, m: 0, l: 0 });
+        Object.assign(_vulnsKpi, sev, { total: cves });
+        updateVulnsKpi();
+        _assetsKpi.scanned = assets.length;
+        updateAssetsKpi();
       } catch (_) { /* Supabase offline — leave defaults */ }
-    })();
+    }
+    loadLatestPosture();
+
+    // Trend dello score sulle ultime run (sparkline SVG, niente librerie).
+    async function loadPostureTrend() {
+      try {
+        const r = await fetch('/api/posture/runs');
+        const d = await r.json();
+        // Trend dei KPI (run precedente).
+        _assetsKpi.prev = (d.runs || [])[1]?.assets_scanned ?? null;
+        updateAssetsKpi();
+        _vulnsKpi.prevTotal = (d.runs || [])[1]?.total_vulns ?? null;
+        updateVulnsKpi();
+        const runs = (d.runs || []).filter((x) => x.avg_score !== null && x.avg_score !== undefined)
+          .slice(0, 12).reverse();
+        if (runs.length < 2) return;
+        const w = 100, h = 24, pad = 2;
+        const xs = runs.map((_, i) => pad + (w - 2 * pad) * i / (runs.length - 1));
+        const ys = runs.map((x) => h - pad - (h - 2 * pad) * (x.avg_score || 0) / 100);
+        const pts = xs.map((x, i) => `${x.toFixed(1)},${ys[i].toFixed(1)}`).join(' ');
+        $('postureTrendSvg').innerHTML =
+          `<polyline points="${pts}" fill="none" stroke="#06b6d4" stroke-width="1.5" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"/>` +
+          `<circle cx="${xs[xs.length - 1].toFixed(1)}" cy="${ys[ys.length - 1].toFixed(1)}" r="2" fill="#06b6d4"/>`;
+        const delta = (runs[runs.length - 1].avg_score || 0) - (runs[0].avg_score || 0);
+        const dEl = $('postureTrendDelta');
+        dEl.textContent = (delta >= 0 ? '+' : '') + delta;
+        dEl.className = 'font-code-sm text-[10px] font-semibold ' + (delta >= 0 ? 'text-emerald-600' : 'text-rose-600');
+        $('postureTrend').classList.remove('hidden');
+      } catch (_) { /* Supabase offline */ }
+    }
+    loadPostureTrend();
+
+    // Chip di esempio: riempiono il campo query (non lanciano la scansione).
+    document.querySelectorAll('.query-example').forEach((b) => {
+      b.addEventListener('click', () => {
+        input.value = b.dataset.example;
+        input.focus();
+      });
+    });
 
     async function loadAssets() {
       try {
@@ -1189,13 +1423,18 @@
         const d = await r.json();
         const list = d.assets || [];
         lastAssets = list;
+        _dashState.hasAssets = list.length > 0;
+        _assetsKpi.enabled = list.filter((a) => a.enabled !== false).length;
+        _assetsKpi.disabled = list.length - _assetsKpi.enabled;
+        updateAssetsKpi();
+        updateOnboarding();
         assetList.innerHTML = list.length
           ? list.map(assetRow).join('')
-          : `<div class="flex items-center justify-center h-full text-slate-300 font-code-sm text-code-sm">${t('dash.inventory_none')}</div>`;
+          : `<div class="flex items-center justify-center h-full text-slate-400 font-code-sm text-code-sm">${t('dash.inventory_none')}</div>`;
         updateAuthStats(list);
         runDashHealthChecks(list);
       } catch (e) {
-        assetList.innerHTML = `<div class="flex items-center justify-center h-full text-rose-300 font-code-sm text-code-sm">${t('dash.inventory_failed')}</div>`;
+        assetList.innerHTML = `<div class="flex items-center justify-center h-full text-rose-400 font-code-sm text-code-sm">${t('dash.inventory_failed')}</div>`;
       }
     }
     loadAssets();
@@ -1230,12 +1469,13 @@
       setPosture(Math.round((sum / scanResults.length) * 100));
     }
 
+    // Pipeline compatta dentro il pannello console (tema scuro).
     const _PIPE_ICONS = { 'pipe-parse': 'data_object', 'pipe-osint': 'travel_explore', 'pipe-detect': 'troubleshoot' };
     const _PIPE_CFG = {
-      idle: { wrap: 'flex items-center gap-4 relative z-10 opacity-40', circle: 'w-8 h-8 rounded-full bg-slate-50 border border-slate-200 flex items-center justify-center', iconCls: 'material-symbols-outlined text-slate-400 text-sm', labelCls: 'font-code-sm text-code-sm text-slate-400', status: '' },
-      running: { wrap: 'flex items-center gap-4 relative z-10', circle: 'w-8 h-8 rounded-full bg-white border-2 border-cyan-400 flex items-center justify-center shadow-sm', iconCls: 'material-symbols-outlined text-cyan-500 text-sm animate-pulse', labelCls: 'font-code-sm text-code-sm text-cyan-700 font-semibold', status: 'RUNNING…' },
-      done: { wrap: 'flex items-center gap-4 relative z-10', circle: 'w-8 h-8 rounded-full bg-emerald-50 border-2 border-emerald-400 flex items-center justify-center shadow-sm', iconCls: 'material-symbols-outlined text-emerald-500 text-sm', labelCls: 'font-code-sm text-code-sm text-emerald-700 font-semibold', status: 'DONE', icon: 'check_circle' },
-      error: { wrap: 'flex items-center gap-4 relative z-10', circle: 'w-8 h-8 rounded-full bg-rose-50 border-2 border-rose-400 flex items-center justify-center shadow-sm', iconCls: 'material-symbols-outlined text-rose-500 text-sm', labelCls: 'font-code-sm text-code-sm text-rose-700 font-semibold', status: 'ERROR', icon: 'error' },
+      idle: { wrap: 'flex items-center gap-2 relative z-10 opacity-40', circle: 'w-6 h-6 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center shrink-0', iconCls: 'material-symbols-outlined text-slate-500 text-[13px]', status: '' },
+      running: { wrap: 'flex items-center gap-2 relative z-10', circle: 'w-6 h-6 rounded-full bg-slate-900 border-2 border-cyan-400 flex items-center justify-center shrink-0 shadow-sm', iconCls: 'material-symbols-outlined text-cyan-400 text-[13px] animate-pulse', status: 'RUNNING…' },
+      done: { wrap: 'flex items-center gap-2 relative z-10', circle: 'w-6 h-6 rounded-full bg-slate-900 border-2 border-emerald-400 flex items-center justify-center shrink-0 shadow-sm', iconCls: 'material-symbols-outlined text-emerald-400 text-[13px]', status: 'DONE', icon: 'check_circle' },
+      error: { wrap: 'flex items-center gap-2 relative z-10', circle: 'w-6 h-6 rounded-full bg-slate-900 border-2 border-rose-400 flex items-center justify-center shrink-0 shadow-sm', iconCls: 'material-symbols-outlined text-rose-400 text-[13px]', status: 'ERROR', icon: 'error' },
     };
     function setPipeStep(id, state) {
       const el = $(id); if (!el) return;
@@ -1271,7 +1511,6 @@
       scanResults = [];
       setPosture(0);
       cveTotal = 0;
-      $('kpiVulns').textContent = '0';
       notFoundCount = 0;
       $('postureNote').textContent = t('dash.posture_note', { n: 0 });
       verifiedCount = 0;
@@ -1308,6 +1547,24 @@
         }
       });
 
+      // Dipendenze REALI aggregate dagli asset (ldd -> pacchetto). Sostituiscono
+      // qualsiasi assunzione: il grafo viene disegnato a 'done' usando lastTarget.
+      es.addEventListener('deps', (e) => {
+        const d = JSON.parse(e.data);
+        if (lastTarget) {
+          lastTarget.deps = d.dependencies || [];
+          lastTarget.edges = d.edges || [];
+          lastTarget.deps_source = d.source || 'runtime';
+          lastTarget.deps_assets = d.asset_count || 0;
+        }
+        const n = (d.dependencies || []).length;
+        if (n) {
+          log(`<span class="text-emerald-400">[DEPS]</span> ${i18n.t('log.deps_found', { n: n, a: d.asset_count })}`);
+        } else {
+          log(`<span class="text-slate-400">[DEPS]</span> ${i18n.t('log.deps_none')}`, 'opacity-70');
+        }
+      });
+
       let _pipeDetectStarted = false;
       _scanDone = false;
       es.addEventListener('result', (e) => {
@@ -1328,10 +1585,10 @@
         } else {
           $('aiScanProgressBar').style.width = '60%';
         }
-        // ACTIVE VULNERABILITIES: somma CVE degli asset positivi, aggiornata live.
+        // cveTotal (CVE della vulnerabilita' cercata) resta per la console;
+        // il KPI ACTIVE VULNERABILITIES ora riflette solo la posture run.
         if (r.product_found && typeof r.cve_count === 'number') {
           cveTotal += r.cve_count;
-          $('kpiVulns').textContent = cveTotal.toLocaleString();
         }
         // SECURITY POSTURE SCORE: conteggio asset senza il prodotto, live.
         if (!r.product_found) {
@@ -1490,10 +1747,22 @@
     // Imposta i testi idle dipendenti da {n} (non gestibili da data-i18n statico).
     function applyIdleI18n() {
       if (runBtn.disabled) return;  // scansione in corso: non sovrascrivere
-      $('postureNote').textContent = t('dash.posture_note', { n: notFoundCount });
-      $('kpiAssetsDelta').textContent = (verifiedCount > 0)
-        ? t('dash.verified_count', { n: verifiedCount })
-        : t('dash.verified_waiting');
+      // Se non e' stata lanciata una scansione in-sessione, mostra i dati
+      // dell'ultima run persistita (con data), non gli zeri.
+      if (_runNote && !scanResults.length) {
+        if (_runNote.date) _runNote.date = fmtRunDate(_lastRun?.created_at || '') || _runNote.date;
+        $('postureNote').textContent = runNoteText();
+      } else {
+        $('postureNote').textContent = t('dash.posture_note', { n: notFoundCount });
+      }
+      if (verifiedCount > 0) {
+        $('kpiAssetsDelta').textContent = t('dash.verified_count', { n: verifiedCount });
+      } else if (_assetsKpi.scanned !== null && _assetsKpi.enabled !== null) {
+        $('kpiAssetsDelta').textContent = t('dash.scanned_count', { n: _assetsKpi.scanned, m: _assetsKpi.enabled });
+      } else {
+        $('kpiAssetsDelta').textContent = t('dash.verified_waiting');
+      }
+      updateAssetsKpi();
     }
 
     // Cambio lingua: ri-applica testi dinamici e ridisegna ciò che è già a schermo.
@@ -1503,6 +1772,8 @@
         assetList.innerHTML = lastAssets.map(assetRow).join('');
       }
       if (lastTarget) renderGraph(lastTarget);
+      if (_lastRun) renderCriticalFindings(_lastRun);
+      updateVulnsKpi();
     });
     applyIdleI18n();
 

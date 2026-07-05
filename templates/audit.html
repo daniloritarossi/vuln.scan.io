@@ -18,7 +18,7 @@
     href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
     rel="stylesheet" />
   <!-- Tailwind CSS -->
-  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <script src="/static/vendor/tailwind.js"></script>
   <!-- Tailwind Theme Config -->
   <script id="tailwind-config">
     tailwind.config = {
@@ -121,8 +121,8 @@
       min-height: max(884px, 100dvh);
     }
   </style>
-  <script src="/static/i18n.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="/static/i18n.js?v=9"></script>
+  <script src="/static/vendor/xlsx.full.min.js"></script>
   <script src="/static/tableutils.js"></script>
 </head>
 
@@ -189,84 +189,14 @@
         })();
     </script>
   </div>
-  <!-- TopAppBar -->
-  <header
-    class="fixed top-0 w-full z-50 bg-white/80 backdrop-blur-xl border-b border-slate-200/50 flex justify-between items-center px-margin-desktop h-16 transition-all">
-    <div class="flex items-center gap-4">
-      <img src="/static/logo-icon.svg" class="w-11 h-11" alt="VULN.SCAN.IO" />
-      <h1 class="font-headline-md text-headline-md font-bold tracking-tight"><span
-          class="text-orange-500">VULN</span><span class="text-slate-400">.</span><span
-          class="text-orange-500">SCAN</span><span class="text-slate-400">.</span><span class="text-cyan-500">IO</span>
-      </h1>
-      <span
-        class="font-label-caps text-label-caps text-cyan-600 tracking-[0.2em] ml-4 hidden md:block px-2.5 py-1 bg-cyan-50 rounded-full border border-cyan-100/50"
-        data-i18n="top.audit_ledger">AUDIT_LEDGER</span>
-    </div>
-    <div class="flex items-center gap-3">
-      <div class="flex items-center gap-1 bg-slate-100 rounded-lg p-0.5">
-        <button data-lang-btn="en"
-          class="px-2 py-1 rounded-md font-label-caps text-[10px] transition-colors">EN</button>
-        <button data-lang-btn="it"
-          class="px-2 py-1 rounded-md font-label-caps text-[10px] transition-colors">IT</button>
-      </div>
-      <div class="text-slate-500 hover:text-cyan-600 hover:glow-sm transition-all duration-150 cursor-pointer">
-        <span class="material-symbols-outlined">sensors</span>
-      </div>
-    </div>
-  </header>
+{% set active_page = 'audit' %}
+{% set crumbs = [
+  {'key': 'crumb.home', 'text': 'Home', 'href': '/'},
+  {'key': 'top.audit_ledger', 'text': 'Audit History'}
+] %}
+  {% include 'partials/topbar.html' %}
   <div class="flex pt-16 h-screen w-full overflow-hidden">
-    <!-- NavigationDrawer (Web) -->
-    <nav
-      class="hidden md:flex flex-col py-panel-padding gap-base-unit fixed left-0 top-16 h-[calc(100vh-64px)] w-64 bg-white/40 backdrop-blur-xl border-r border-slate-200/50 z-40">
-      <div class="px-6 mb-4">
-        <span class="font-label-caps text-label-caps text-slate-400 tracking-[0.2em]">CORE_NAV</span>
-      </div>
-      <ul class="flex flex-col w-full px-4 gap-2">
-        <li class="">
-          <a class="flex items-center gap-3 px-4 py-3 text-slate-600 hover:text-slate-900 hover:bg-white/60 rounded-xl transition-all font-label-caps text-label-caps"
-            href="/">
-            <span class="material-symbols-outlined">dashboard</span>
-            <span class="">DASHBOARD</span>
-          </a>
-        </li>
-        <li class="">
-          <a class="flex items-center gap-3 px-4 py-3 text-slate-600 hover:text-slate-900 hover:bg-white/60 rounded-xl transition-all font-label-caps text-label-caps"
-            href="/assets">
-            <span class="material-symbols-outlined">inventory_2</span>
-            <span class="">ASSETS</span>
-          </a>
-        </li>
-        <li class="">
-          <a class="flex items-center gap-3 px-4 py-3 text-slate-600 hover:text-slate-900 hover:bg-white/60 rounded-xl transition-all font-label-caps text-label-caps"
-            href="/intel">
-            <span class="material-symbols-outlined">psychology</span>
-            <span class="">SECURITY POSTURE</span>
-          </a>
-        </li>
-        <!-- Active: AUDIT -->
-        <li class="">
-          <a class="flex items-center gap-3 px-4 py-3 text-white bg-slate-900 rounded-xl font-label-caps text-label-caps shadow-lg shadow-slate-900/10 transition-transform hover:scale-[1.02]"
-            href="/audit">
-            <span class="material-symbols-outlined text-cyan-400">fact_check</span>
-            <span class="">AUDIT</span>
-          </a>
-        </li>
-        <li class="">
-          <a class="flex items-center gap-3 px-4 py-3 text-slate-600 hover:text-slate-900 hover:bg-white/60 rounded-xl transition-all font-label-caps text-label-caps"
-            href="/sbom">
-            <span class="material-symbols-outlined">receipt_long</span>
-            <span class="">SBOM</span>
-          </a>
-        </li>
-        <li class="">
-          <a class="flex items-center gap-3 px-4 py-3 text-slate-600 hover:text-slate-900 hover:bg-white/60 rounded-xl transition-all font-label-caps text-label-caps"
-            href="/settings">
-            <span class="material-symbols-outlined">settings</span>
-            <span class="">SETTINGS</span>
-          </a>
-        </li>
-      </ul>
-    </nav>
+  {% include 'partials/sidebar.html' %}
     <!-- Main Content Canvas -->
     <main class="flex-1 md:ml-64 p-4 md:p-8 overflow-y-auto pb-24 md:pb-8 relative w-full h-full">
       <div class="mx-auto space-y-8">
@@ -379,21 +309,7 @@
       </div>
     </main>
   </div>
-  <!-- BottomNavBar (Mobile) -->
-  <nav
-    class="md:hidden fixed bottom-6 left-4 right-4 flex justify-around items-center px-2 py-2 bg-white/90 backdrop-blur-xl border border-slate-200/50 rounded-2xl shadow-2xl z-50">
-    <a class="flex flex-col items-center justify-center text-slate-400 p-3 hover:text-cyan-600 transition-all" href="/">
-      <span class="material-symbols-outlined">dashboard</span>
-    </a>
-    <a class="flex flex-col items-center justify-center text-slate-400 p-3 hover:text-cyan-600 transition-all"
-      href="/assets">
-      <span class="material-symbols-outlined">inventory_2</span>
-    </a>
-    <a class="flex flex-col items-center justify-center bg-slate-900 text-cyan-400 shadow-xl rounded-xl p-3 -mt-6 border-4 border-white"
-      href="/audit">
-      <span class="material-symbols-outlined">fact_check</span>
-    </a>
-  </nav>
+  {% include 'partials/bottomnav.html' %}
 
   <script>
     const $ = (id) => document.getElementById(id);

@@ -65,6 +65,22 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
   GRANT ALL ON SEQUENCES TO anon, authenticated, service_role;
 
+-- 4b) INVENTARIO ASSET: sostituisce assets.txt. Una riga per asset.
+--     La password e' memorizzata cifrata (prefisso 'ENC:', vedi crypto.py).
+CREATE TABLE IF NOT EXISTS public.assets (
+  id               bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  created_at       timestamptz NOT NULL DEFAULT now(),
+  updated_at       timestamptz NOT NULL DEFAULT now(),
+  ip               text NOT NULL,        -- IP o hostname
+  username         text NOT NULL DEFAULT '',
+  password         text NOT NULL DEFAULT '',  -- 'ENC:<hex>' oppure vuota
+  os_type          text NOT NULL DEFAULT '',  -- 'linux' | 'windows' | ''
+  os_major_version text NOT NULL DEFAULT '',  -- es. '22.04', '10', '2019'
+  enabled          boolean NOT NULL DEFAULT true
+);
+
+CREATE INDEX IF NOT EXISTS idx_assets_ip ON public.assets(ip);
+
 -- 5) FULL POSTURE (SCA): run manuale -> asset -> finding per pacchetto.
 CREATE TABLE IF NOT EXISTS public.posture_runs (
   id              bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -112,8 +128,29 @@ ALTER TABLE public.posture_assets
   ADD COLUMN IF NOT EXISTS os_type          text,
   ADD COLUMN IF NOT EXISTS os_major_version text;
 
+-- Inventario software COMPLETO per asset (SBOM): tutti i pacchetti installati,
+-- non solo i vulnerabili. Arricchito con identificatori e metadati SBOM.
+CREATE TABLE IF NOT EXISTS public.posture_components (
+  id           bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  asset_id     bigint REFERENCES public.posture_assets(id) ON DELETE CASCADE,
+  package      text NOT NULL,
+  version      text,
+  ecosystem    text,
+  category     text,
+  purl         text,      -- Package URL (spec purl)
+  cpe          text,      -- CPE 2.3 (best-effort)
+  license      text,      -- SPDX id o NOASSERTION
+  supplier     text,      -- fornitore o NOASSERTION
+  sha256       text,      -- digest coordinate (identita' deterministica)
+  vuln_count   integer DEFAULT 0,
+  max_severity text,
+  cve_ids      jsonb DEFAULT '[]'::jsonb,
+  depends_on   jsonb DEFAULT '[]'::jsonb   -- nomi pacchetti dipendenti (relazioni)
+);
+
 CREATE INDEX IF NOT EXISTS idx_posture_assets_run    ON public.posture_assets(run_id);
 CREATE INDEX IF NOT EXISTS idx_posture_findings_asset ON public.posture_findings(asset_id);
+CREATE INDEX IF NOT EXISTS idx_posture_components_asset ON public.posture_components(asset_id);
 
 -- Permessi anche sulle nuove tabelle.
 GRANT ALL ON ALL TABLES    IN SCHEMA public TO anon, authenticated, service_role;

@@ -34,6 +34,19 @@ except ImportError:
 # Cache in-process: evita query OSV ripetute per la stessa coppia (prodotto, versione).
 _osv_cache: dict = {}
 
+# Il nome canonico del prodotto NON coincide sempre col nome del pacchetto negli
+# ecosistemi di distribuzione OSV (Debian/Ubuntu). Es: "apache" come sorgente
+# Debian e' il vecchissimo Apache 1.3 (poche DSA), mentre l'httpd moderno e'
+# pacchettizzato come "apache2". Qui si normalizza il nome per la query OSV.
+_OSV_PKG_OVERRIDE = {
+    "apache": "apache2",
+}
+
+
+def _osv_pkg_name(product: str) -> str:
+    """Nome del pacchetto da usare nella query OSV (override distro se noto)."""
+    return _OSV_PKG_OVERRIDE.get(product.lower(), product.lower())
+
 
 def _osv_url() -> str:
     return load_config()["osv"]["url"]
@@ -43,21 +56,61 @@ def _osv_timeout() -> int:
     return int(load_config()["osv"]["timeout"])
 
 
-def _osv_raw(product: str, version: str | None, timeout: int | None = None) -> dict:
+def os_ecosystem(os_type: str | None, os_major_version: str | None) -> str | None:
+    """
+    Mappa il SO dell'asset all'ecosistema OSV piu' probabile.
+
+    OSV (dal 2024) RICHIEDE sempre package.ecosystem: una query per solo nome
+    risponde 400 'Invalid query'. os_type qui distingue solo linux/windows, percio'
+    si usa os_major_version come euristica di distribuzione:
+      - "XX.YY" (es. 22.04, 20.04) -> Ubuntu
+      - intero  (es. 11, 12, 13)   -> Debian
+    Fallback linux -> Debian (copertura OS-package piu' ampia in OSV).
+    Ritorna None per SO non-linux/ignoto: in quel caso si evita la query (no 400).
+    """
+    t = (os_type or "").lower()
+    if t == "windows":
+        return None
+    mv = (os_major_version or "").strip()
+    if _re.fullmatch(r"\d+\.\d+", mv):
+        return "Ubuntu"
+    if _re.fullmatch(r"\d+", mv):
+        return "Debian"
+    # linux o SO ignoto -> Debian (copertura OS-package piu' ampia in OSV):
+    # meglio un conteggio a livello distribuzione che nessun risultato.
+    return "Debian"
+
+
+def _osv_raw(product: str, version: str | None, ecosystem: str | None = None,
+             timeout: int | None = None) -> dict:
     """
     Interrogazione OSV grezza (cache-ata): ritorna la lista COMPLETA di id.
     {"count": int, "ids": [str] (tutti), "error": str | None}.
+
+    OSV richiede sempre 'ecosystem'. Senza, la query non viene inviata e si
+    ritorna un risultato vuoto (nessun errore 400 propagato all'utente).
+
+    NB: si interroga per nome+ecosystem SENZA 'version'. Gli ecosistemi di
+    distribuzione (Debian, Ubuntu, ...) usano stringhe di versione native del
+    pacchetto (es. '1.18.0-6ubuntu14'), non la versione upstream rilevata
+    (es. '1.21.0'): inviarla produrrebbe conteggi falsati (spesso 0). Il
+    conteggio resta a livello prodotto/distribuzione; la precisione sulla
+    versione e' delegata al path advisory/version_affected.
     """
-    key = (product.lower(), version or "")
+    key = (product.lower(), version or "", ecosystem or "")
     if key in _osv_cache:
         return _osv_cache[key]
+
+    if not ecosystem:
+        # Nessun ecosistema -> OSV rifiuterebbe la query. Si salta in modo pulito.
+        result = {"count": 0, "ids": [], "error": None}
+        _osv_cache[key] = result
+        return result
 
     if timeout is None:
         timeout = _osv_timeout()
 
-    payload = {"package": {"name": product.lower()}}
-    if version:
-        payload["version"] = version
+    payload: dict = {"package": {"name": _osv_pkg_name(product), "ecosystem": ecosystem}}
 
     try:
         resp = requests.post(
@@ -76,27 +129,29 @@ def _osv_raw(product: str, version: str | None, timeout: int | None = None) -> d
     return result
 
 
-def query_osv(product: str, version: str | None, timeout: int | None = None) -> dict:
+def query_osv(product: str, version: str | None, ecosystem: str | None = None,
+              timeout: int | None = None) -> dict:
     """
-    Interroga OSV per (prodotto, versione).
+    Interroga OSV per (prodotto, versione, ecosistema).
 
     Ritorna: {"count": int, "ids": [str], "error": str | None}.
     'count' e' il totale reale; 'ids' e' troncato (max 10) per la UI/persistenza.
     """
     if not product:
         return {"count": 0, "ids": [], "error": None}
-    r = _osv_raw(product, version, timeout)
+    r = _osv_raw(product, version, ecosystem, timeout)
     return {"count": r["count"], "ids": r["ids"][:10], "error": r["error"]}
 
 
-def query_osv_ids(product: str, version: str | None, timeout: int | None = None) -> dict:
+def query_osv_ids(product: str, version: str | None, ecosystem: str | None = None,
+                  timeout: int | None = None) -> dict:
     """
     Come query_osv ma con la lista COMPLETA di id (per il 'show more' della UI).
     Ritorna: {"count": int, "ids": [str] (tutti), "error": str | None}.
     """
     if not product:
         return {"count": 0, "ids": [], "error": None}
-    return _osv_raw(product, version, timeout)
+    return _osv_raw(product, version, ecosystem, timeout)
 
 
 def query_osv_ecosystem(name: str, ecosystem: str | None, version: str | None,
