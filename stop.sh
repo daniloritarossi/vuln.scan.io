@@ -1,8 +1,16 @@
 #!/usr/bin/env bash
-# Ferma lo stack Supabase locale. I dati restano in supabase/volumes/db/data.
-# (Il server FastAPI si ferma con Ctrl+C nel terminale dove gira start.sh.)
+# Ferma lo stack Supabase locale + il server FastAPI (uvicorn).
+# I dati restano in supabase/volumes/db/data.
 set -euo pipefail
 cd "$(dirname "$0")"
+
+echo "==> spengo il server FastAPI (uvicorn app:app)"
+if pkill -f "uvicorn app:app"; then
+  echo "    server fermato"
+else
+  echo "    nessun server in esecuzione"
+fi
+
 echo "==> spengo i container Supabase (i dati restano persistenti)"
 docker compose -f supabase/docker-compose.yml down
 
