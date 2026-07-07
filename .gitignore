@@ -1,4 +1,25 @@
+# ── Python: virtualenv e bytecode (creati da start.sh fase 3) ──
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# ── Generati al primo avvio (start.sh) ──
+# binario encdec compilato con il prefisso segreto dentro
+.encdec/
+# config del wizard: contiene claude_api_key / serper_api_key
+config.json
+
+# ── Supabase: dati runtime del Docker stack ──
 supabase/volumes/db/data
-.claude
+
+# ── Macchine Docker di test (create dal wizard) ──
 docker-test-machine-linux
 docker-test-machine-windows
+
+# ── Tooling locale ──
+.claude
+*.log
+*.pid
