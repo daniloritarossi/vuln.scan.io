@@ -6,6 +6,8 @@ Backend **FastAPI** · Frontend **HTML + Tailwind** (CDN) · risultati in tempo 
 
 > ⚠️ **Uso responsabile.** Eseguire scansioni o login solo su asset di propria titolarità o per cui si dispone di autorizzazione scritta. Scansionare sistemi terzi senza permesso è illecito.
 
+![Home](static/screens/home1.png)
+
 ---
 
 ## Installazione
@@ -21,6 +23,8 @@ cd vulnerability_feed_aggregator
 chmod +x start.sh stop.sh
 ./start.sh
 ```
+
+In alternativa al `clone`, è sempre possibile scaricare l'artefatto di un **tag/release** come pacchetto `.zip` (pagina *Tags* del repo → *Download ZIP*, o `<repo>/archive/refs/tags/<tag>.zip`): estrarre e procedere da `cd vulnerability_feed_aggregator` in poi.
 
 ---
 
