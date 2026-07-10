@@ -94,7 +94,7 @@
     }
   </style>
   <style>body { min-height: max(884px, 100dvh); }</style>
-  <script src="/static/i18n.js?v=12"></script>
+  <script src="/static/i18n.js?v=14"></script>
 </head>
 
 <body
@@ -397,6 +397,60 @@
           </div>
         </section>
 
+        <!-- ── EMAIL (SMTP) + AUTH POLICY ────────────────────────── -->
+        <section class="neural-panel rounded-2xl p-6 space-y-5">
+          <div class="flex items-center gap-3 mb-1">
+            <span class="material-symbols-outlined text-cyan-500">outgoing_mail</span>
+            <h3 class="font-label-caps text-label-caps text-slate-800 tracking-[0.15em]">EMAIL (SMTP) &amp; AUTH POLICY</h3>
+          </div>
+          <p class="font-code-sm text-code-sm text-slate-400">
+            SMTP per inviti di attivazione account e reset password. Host vuoto =
+            email disabilitate (i link one-time vengono mostrati all'admin per la
+            consegna manuale).
+          </p>
+          <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div class="space-y-1">
+              <label class="font-code-sm text-code-sm text-slate-600 font-semibold">SMTP Host</label>
+              <input id="smtpHost" type="text" class="setting-input" placeholder="smtp.example.com" />
+            </div>
+            <div class="space-y-1">
+              <label class="font-code-sm text-code-sm text-slate-600 font-semibold">SMTP Port</label>
+              <input id="smtpPort" type="number" min="1" max="65535" class="setting-input" placeholder="587" />
+            </div>
+            <div class="space-y-1">
+              <label class="font-code-sm text-code-sm text-slate-600 font-semibold">Username</label>
+              <input id="smtpUser" type="text" class="setting-input" />
+            </div>
+            <div class="space-y-1">
+              <label class="font-code-sm text-code-sm text-slate-600 font-semibold">Password</label>
+              <input id="smtpPass" type="password" class="setting-input" />
+            </div>
+            <div class="space-y-1">
+              <label class="font-code-sm text-code-sm text-slate-600 font-semibold">From address</label>
+              <input id="smtpFrom" type="text" class="setting-input" placeholder="vulnscan@example.com" />
+            </div>
+            <div class="space-y-1">
+              <label class="font-code-sm text-code-sm text-slate-600 font-semibold">Base URL (link nelle email)</label>
+              <input id="smtpBaseUrl" type="text" class="setting-input" placeholder="http://localhost:8000" />
+            </div>
+          </div>
+          <div class="grid grid-cols-1 gap-4 sm:grid-cols-3 pt-2 border-t border-slate-100">
+            <div class="space-y-1">
+              <label class="font-code-sm text-code-sm text-slate-600 font-semibold">Password rotation (giorni)</label>
+              <input id="authRotation" type="number" min="0" max="3650" class="setting-input" />
+              <p class="font-code-sm text-code-sm text-slate-400">0 = disattivata (NIST 800-63B)</p>
+            </div>
+            <div class="space-y-1">
+              <label class="font-code-sm text-code-sm text-slate-600 font-semibold">Lunghezza minima password</label>
+              <input id="authMinLen" type="number" min="8" max="128" class="setting-input" />
+            </div>
+            <div class="space-y-1">
+              <label class="font-code-sm text-code-sm text-slate-600 font-semibold">Validità invito (ore)</label>
+              <input id="authInviteTtl" type="number" min="1" max="720" class="setting-input" />
+            </div>
+          </div>
+        </section>
+
         <!-- ── OSV ───────────────────────────────────────────────── -->
         <section class="neural-panel rounded-2xl p-6 space-y-5">
           <div class="flex items-center gap-3 mb-1">
@@ -572,6 +626,17 @@
         $('jiraEmail').value = cfg.ticketing?.jira_email || '';
         $('jiraToken').value = cfg.ticketing?.jira_api_token || '';
         $('jiraProject').value = cfg.ticketing?.jira_project_key || '';
+
+        // SMTP + auth policy
+        $('smtpHost').value = cfg.smtp?.host || '';
+        $('smtpPort').value = cfg.smtp?.port ?? 587;
+        $('smtpUser').value = cfg.smtp?.username || '';
+        $('smtpPass').value = cfg.smtp?.password || '';
+        $('smtpFrom').value = cfg.smtp?.from_addr || '';
+        $('smtpBaseUrl').value = cfg.smtp?.base_url || '';
+        $('authRotation').value = cfg.auth?.rotation_days ?? 0;
+        $('authMinLen').value = cfg.auth?.min_password_len ?? 12;
+        $('authInviteTtl').value = cfg.auth?.invite_ttl_hours ?? 48;
       } catch (e) {
         showToast(t('settings.load_failed') + ' ' + e.message, false);
       }
@@ -611,6 +676,19 @@
           jira_email: $('jiraEmail').value,
           jira_api_token: $('jiraToken').value,
           jira_project_key: $('jiraProject').value,
+        },
+        smtp: {
+          host: $('smtpHost').value.trim(),
+          port: parseInt($('smtpPort').value) || 587,
+          username: $('smtpUser').value.trim(),
+          password: $('smtpPass').value,
+          from_addr: $('smtpFrom').value.trim(),
+          base_url: $('smtpBaseUrl').value.trim(),
+        },
+        auth: {
+          rotation_days: parseInt($('authRotation').value) || 0,
+          min_password_len: parseInt($('authMinLen').value) || 12,
+          invite_ttl_hours: parseInt($('authInviteTtl').value) || 48,
         },
       };
       try {

@@ -17,14 +17,18 @@ Avvio:
 """
 
 import json
+import logging
+import os
 import socket
 import subprocess
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
+from typing import Optional
 from urllib.parse import urlparse
 
-from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
+from fastapi import Depends, FastAPI, Request
+from fastapi.responses import (HTMLResponse, JSONResponse, RedirectResponse,
+                               StreamingResponse)
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -53,6 +57,17 @@ from ticketing import create_ticket, TicketError
 from localscan import run_gitleaks, run_trivy_image, LocalScanError
 from compliance import derive_compliance, compliance_summary
 from db import fetch_finding, set_finding_ticket
+import db
+from auth import (AuthRequired, Forbidden, PasswordChangeRequired, CurrentUser,
+                  get_current_user, require_roles, visible_asset_ids,
+                  visible_asset_ips, make_session_token, verify_password,
+                  hash_password, ensure_default_admin, create_onetime_token,
+                  consume_onetime_token, set_user_password,
+                  password_policy_error, SESSION_COOKIE, SESSION_TTL, ROLES)
+from mailer import (send_activation, send_reset, activation_link,
+                    smtp_enabled, MailError)
+
+logger = logging.getLogger("vfa.app")
 
 BASE_DIR = Path(__file__).parent
 ASSETS_FILE = BASE_DIR / "assets.txt"
@@ -72,14 +87,296 @@ def _git_version() -> str:
 
 APP_VERSION = _git_version()
 
+# Repo GitHub per il check aggiornamenti (override con VFA_GITHUB_REPO).
+GITHUB_REPO = os.environ.get("VFA_GITHUB_REPO", "daniloritarossi/vuln.scan.io")
+
+
+def _base_tag(version: str) -> str:
+    """'v1.0.11-alfa-3-gabc1234' -> 'v1.0.11-alfa' (output di git describe)."""
+    import re
+    return re.sub(r"-\d+-g[0-9a-f]+$", "", (version or "").strip())
+
+
+def _version_tuple(tag: str):
+    """'v1.0.11-alfa' -> (1, 0, 11) per il confronto numerico. None se non parsabile."""
+    import re
+    m = re.match(r"v?(\d+)\.(\d+)(?:\.(\d+))?", tag or "")
+    if not m:
+        return None
+    return (int(m.group(1)), int(m.group(2)), int(m.group(3) or 0))
+
+
+# Cache del check remoto: 1 chiamata GitHub ogni 6 ore, non a ogni pagina.
+_version_cache = {"at": 0.0, "latest": None}
+
+
+def _fetch_latest_tag() -> Optional[str]:
+    """Tag piu' recente su GitHub (max per versione). None se irraggiungibile."""
+    import time as _time
+    import requests as _req
+    now = _time.time()
+    if _version_cache["latest"] and now - _version_cache["at"] < 6 * 3600:
+        return _version_cache["latest"]
+    try:
+        r = _req.get(f"https://api.github.com/repos/{GITHUB_REPO}/tags",
+                     params={"per_page": 30},
+                     headers={"Accept": "application/vnd.github+json"},
+                     timeout=6)
+        r.raise_for_status()
+        tags = [t.get("name") for t in r.json() if t.get("name")]
+        parsed = [(v, t) for t in tags if (v := _version_tuple(t))]
+        latest = max(parsed)[1] if parsed else None
+        _version_cache.update({"at": now, "latest": latest})
+        return latest
+    except Exception as exc:
+        logger.info("check versione GitHub fallito: %s", exc)
+        return None
+
 app = FastAPI(title="Vulnerability Feed Aggregator", version=APP_VERSION)
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 templates.env.globals["app_version"] = APP_VERSION
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 
 
+# ---------------------------------------------------------------------------
+# AUTENTICAZIONE / RBAC (cono di visibilita')
+# ---------------------------------------------------------------------------
+
+@app.on_event("startup")
+def _seed_default_admin():
+    """Crea admin/admin al primo avvio (best-effort, vedi auth.py)."""
+    ensure_default_admin()
+
+
+@app.exception_handler(AuthRequired)
+async def _auth_required_handler(request: Request, exc: AuthRequired):
+    """API -> 401 JSON; pagine -> redirect alla login."""
+    if request.url.path.startswith("/api/"):
+        return JSONResponse({"error": "Autenticazione richiesta"}, status_code=401)
+    return RedirectResponse("/login", status_code=303)
+
+
+@app.exception_handler(Forbidden)
+async def _forbidden_handler(request: Request, exc: Forbidden):
+    """Ruolo/scope insufficiente: 403 per le API, home per le pagine."""
+    if request.url.path.startswith("/api/"):
+        return JSONResponse({"error": exc.detail}, status_code=403)
+    return RedirectResponse("/", status_code=303)
+
+
+@app.exception_handler(PasswordChangeRequired)
+async def _pwchange_handler(request: Request, exc: PasswordChangeRequired):
+    """Cambio password obbligatorio: blocca tutto tranne /change-password."""
+    if request.url.path.startswith("/api/"):
+        return JSONResponse({"error": "Cambio password obbligatorio",
+                             "code": "password_change_required"},
+                            status_code=403)
+    return RedirectResponse("/change-password", status_code=303)
+
+
+# Dependency riutilizzabili per la matrice dei ruoli.
+_admin_only = require_roles("admin")
+_admin_manager = require_roles("admin", "manager")
+_writer = require_roles("admin", "manager", "editor")   # tutto tranne viewer
+
+
+def _require_asset_in_scope(user: CurrentUser, asset_id: int) -> None:
+    """403 se l'editor tenta di operare su un asset fuori dal suo cono."""
+    ids = visible_asset_ids(user)
+    if ids is not None and asset_id not in ids:
+        raise Forbidden("Asset fuori dal tuo cono di visibilita'")
+
+
+def _require_ip_in_scope(user: CurrentUser, ip: str) -> None:
+    """403 se l'editor tenta di operare su un finding di un host fuori scope."""
+    ips = visible_asset_ips(user)
+    if ips is not None and (ip or "") not in ips:
+        raise Forbidden("Asset fuori dal tuo cono di visibilita'")
+
+
+def _filter_posture_run(run: dict, ips) -> dict:
+    """Copia della run di postura limitata agli asset con ip nel set indicato."""
+    if not run or ips is None:
+        return run
+    filtered = dict(run)
+    filtered["posture_assets"] = [
+        pa for pa in (run.get("posture_assets") or []) if pa.get("ip") in ips
+    ]
+    return filtered
+
+
+@app.get("/login", response_class=HTMLResponse)
+def login_page(request: Request):
+    """Pagina di login (unica pagina accessibile senza sessione)."""
+    return templates.TemplateResponse("login.html", {"request": request})
+
+
+@app.post("/api/login")
+async def api_login(request: Request):
+    """Verifica credenziali e apre la sessione (cookie HttpOnly firmato)."""
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON"}, status_code=400)
+    username = (body.get("username") or "").strip()
+    password = body.get("password") or ""
+    row = db.fetch_user_by_username(username) if username else None
+    # Account invitato ma mai attivato: password_hash assente o is_active falso.
+    # Risposta identica alle credenziali errate (no enumeration).
+    if (not row or not row.get("password_hash")
+            or not row.get("is_active", True)
+            or not verify_password(password, row["password_hash"])):
+        return JSONResponse({"error": "Credenziali non valide"}, status_code=401)
+    resp = JSONResponse({"ok": True, "username": row["username"], "role": row["role"],
+                         "must_change_password": bool(row.get("must_change_password"))})
+    resp.set_cookie(SESSION_COOKIE, make_session_token(row["id"]),
+                    max_age=SESSION_TTL, httponly=True, samesite="lax")
+    return resp
+
+
+@app.get("/logout")
+def logout():
+    """Chiude la sessione e torna alla login."""
+    resp = RedirectResponse("/login", status_code=303)
+    resp.delete_cookie(SESSION_COOKIE)
+    return resp
+
+
+@app.get("/api/me")
+def api_me(user: CurrentUser = Depends(get_current_user)):
+    """Utente corrente (per la UI: chip utente, visibilita' voci di menu)."""
+    return user.to_dict()
+
+
+@app.get("/api/version/check")
+def api_version_check(user: CurrentUser = Depends(get_current_user)):
+    """
+    Confronta la versione locale (tag git) con l'ultimo tag su GitHub.
+    Risposta cache-ata lato server (6h) per non consumare rate limit.
+    {current, latest, update_available, repo_url}
+    """
+    current = _base_tag(APP_VERSION)
+    latest = _fetch_latest_tag()
+    update = False
+    if latest and latest != current:
+        cur_v, lat_v = _version_tuple(current), _version_tuple(latest)
+        # Confronto numerico se possibile; fallback: diverso = aggiornabile.
+        update = (lat_v > cur_v) if (cur_v and lat_v) else True
+    return {"current": current, "latest": latest, "update_available": update,
+            "repo_url": f"https://github.com/{GITHUB_REPO}"}
+
+
+# ---------------------------------------------------------------------------
+# Onboarding via email: attivazione account, reset e cambio password.
+# ---------------------------------------------------------------------------
+
+@app.get("/activate", response_class=HTMLResponse)
+def activate_page(request: Request, token: str = ""):
+    """Pagina di attivazione/reset: l'utente sceglie la propria password.
+    Raggiungibile senza sessione (il token one-time E' la credenziale)."""
+    return templates.TemplateResponse("activate.html",
+                                      {"request": request, "token": token})
+
+
+@app.post("/api/activate")
+async def api_activate(request: Request):
+    """
+    Consuma un token one-time (attivazione o reset) e imposta la password
+    scelta dall'utente. L'attivazione verifica implicitamente l'email.
+    Body: {token, password}.
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON"}, status_code=400)
+    token = (body.get("token") or "").strip()
+    password = body.get("password") or ""
+    err = password_policy_error(password)
+    if err:
+        return JSONResponse({"error": err}, status_code=400)
+    # Prova entrambi i purpose: il token e' one-time e legato all'utente.
+    user_row = consume_onetime_token(token, "activation")
+    verified = user_row is not None
+    if user_row is None:
+        user_row = consume_onetime_token(token, "reset")
+    if user_row is None:
+        return JSONResponse({"error": "Token non valido o scaduto"}, status_code=400)
+    if not set_user_password(user_row["id"], password):
+        return JSONResponse({"error": "Supabase non raggiungibile"}, status_code=503)
+    if verified and user_row.get("email") and not user_row.get("email_verified_at"):
+        db.update_user(user_row["id"], {"email_verified_at": "now()"})
+    return {"ok": True, "username": user_row["username"]}
+
+
+@app.get("/change-password", response_class=HTMLResponse)
+def change_password_page(request: Request,
+                         user: CurrentUser = Depends(get_current_user)):
+    """Pagina di cambio password (anche in modalita' forzata)."""
+    return templates.TemplateResponse(
+        "change_password.html",
+        {"request": request, "forced": user.must_change_password})
+
+
+@app.post("/api/change-password")
+async def api_change_password(request: Request,
+                              user: CurrentUser = Depends(get_current_user)):
+    """
+    Cambio password dell'utente corrente. Body: {old_password, new_password}.
+    Richiede la password attuale; invalida tutte le sessioni emesse prima
+    (il nuovo cookie viene reimpostato in risposta).
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON"}, status_code=400)
+    old_pw = body.get("old_password") or ""
+    new_pw = body.get("new_password") or ""
+    err = password_policy_error(new_pw)
+    if err:
+        return JSONResponse({"error": err}, status_code=400)
+    row = db.fetch_user(user.id)
+    if not row or not verify_password(old_pw, row.get("password_hash") or ""):
+        return JSONResponse({"error": "Password attuale errata"}, status_code=400)
+    if old_pw == new_pw:
+        return JSONResponse({"error": "La nuova password deve essere diversa"},
+                            status_code=400)
+    if not set_user_password(user.id, new_pw):
+        return JSONResponse({"error": "Supabase non raggiungibile"}, status_code=503)
+    # Nuovo cookie: quello corrente e' invalidato da password_changed_at.
+    resp = JSONResponse({"ok": True})
+    resp.set_cookie(SESSION_COOKIE, make_session_token(user.id),
+                    max_age=SESSION_TTL, httponly=True, samesite="lax")
+    return resp
+
+
+@app.post("/api/forgot")
+async def api_forgot(request: Request):
+    """
+    "Password dimenticata": invia un link di reset se l'email corrisponde a
+    un utente attivo. Risposta SEMPRE identica (no enumeration).
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON"}, status_code=400)
+    email = (body.get("email") or "").strip().lower()
+    generic = {"ok": True,
+               "message": "Se l'email corrisponde a un account, riceverai un link di reset."}
+    if not email or not smtp_enabled():
+        return generic
+    row = db.fetch_user_by_email(email)
+    if row and row.get("is_active"):
+        token = create_onetime_token(row["id"], "reset")
+        if token:
+            try:
+                send_reset(email, row["username"], token)
+            except MailError as exc:
+                logger.warning("send_reset fallita: %s", exc)
+    return generic
+
+
 @app.get("/", response_class=HTMLResponse)
-def index(request: Request):
+def index(request: Request, user: CurrentUser = Depends(get_current_user)):
     """Serve la singola pagina dell'applicazione."""
     return templates.TemplateResponse(
         "index.html",
@@ -88,44 +385,49 @@ def index(request: Request):
 
 
 @app.get("/assets", response_class=HTMLResponse)
-def assets_page(request: Request):
+def assets_page(request: Request, user: CurrentUser = Depends(get_current_user)):
     """Pagina di gestione (CRUD) dell'inventario asset."""
     return templates.TemplateResponse("assets.html", {"request": request})
 
 
 @app.get("/audit", response_class=HTMLResponse)
-def audit_page(request: Request):
+def audit_page(request: Request, user: CurrentUser = Depends(_writer)):
     """Pagina AUDIT: storico dei risultati di scansione salvati su Supabase."""
     return templates.TemplateResponse("audit.html", {"request": request})
 
 
 @app.get("/sbom", response_class=HTMLResponse)
-def sbom_page(request: Request):
+def sbom_page(request: Request, user: CurrentUser = Depends(get_current_user)):
     """Pagina SBOM: Software Bill of Materials per asset dell'inventario."""
     return templates.TemplateResponse("sbom.html", {"request": request})
 
 
 @app.get("/api/sbom")
-def api_sbom(run_id: int | None = None):
+def api_sbom(run_id: int | None = None,
+             user: CurrentUser = Depends(get_current_user)):
     """
     Inventario software COMPLETO dell'ultima run di postura (tutti i componenti,
     non solo i vulnerabili). Ogni riga porta gli identificatori SBOM
     (purl, cpe, licenza, fornitore, sha256, relazioni).
+    Editor: limitato agli asset del proprio cono di visibilita'.
     """
     run = fetch_posture_sbom(run_id)
     if not run:
         return {"rows": []}
+    run = _filter_posture_run(run, visible_asset_ips(user))
     return {"rows": sbom_rows(run)}
 
 
 @app.get("/api/sbom/export")
-def api_sbom_export(format: str = "cyclonedx", run_id: int | None = None):
+def api_sbom_export(format: str = "cyclonedx", run_id: int | None = None,
+                    user: CurrentUser = Depends(_writer)):
     """
     Esporta la SBOM in formato standard.
     format: 'cyclonedx' (CycloneDX 1.5) | 'spdx' (SPDX 2.3).
     Download come file JSON.
     """
     run = fetch_posture_sbom(run_id)
+    run = _filter_posture_run(run or {}, visible_asset_ips(user))
     fmt = (format or "cyclonedx").lower()
     if fmt == "spdx":
         doc = build_spdx(run or {})
@@ -141,23 +443,29 @@ def api_sbom_export(format: str = "cyclonedx", run_id: int | None = None):
 
 
 @app.get("/findings", response_class=HTMLResponse)
-def findings_page(request: Request):
+def findings_page(request: Request, user: CurrentUser = Depends(get_current_user)):
     """Pagina FINDINGS: ciclo di vita unificato (dedup + workflow + SLA)."""
     return templates.TemplateResponse("findings.html", {"request": request})
 
 
 @app.get("/api/findings")
 def api_findings(status: str | None = None, severity: str | None = None,
-                 source: str | None = None, q: str | None = None):
+                 source: str | None = None, q: str | None = None,
+                 user: CurrentUser = Depends(get_current_user)):
     """
     Elenco finding unificati + aggregati per la UI.
     Filtri opzionali: status, severity, source (substring), q (testo libero).
+    Editor: solo i finding degli asset nel proprio cono di visibilita'
+    (anche gli aggregati sono ricalcolati sul sottoinsieme, niente leak).
     503 se il DB non e' raggiungibile.
     """
     rows = fetch_findings()
     if rows is None:
         return JSONResponse({"error": "Supabase unreachable", "findings": []},
                             status_code=503)
+    scope_ips = visible_asset_ips(user)
+    if scope_ips is not None:
+        rows = [r for r in rows if (r.get("asset_ip") or "") in scope_ips]
     summary = summarize(rows)   # aggregati sull'intero dataset, non sul filtro
     if status:
         rows = [r for r in rows if (r.get("status") or "open") == status]
@@ -177,7 +485,8 @@ def api_findings(status: str | None = None, severity: str | None = None,
 
 @app.post("/api/findings/import")
 async def api_findings_import(request: Request, tool: str = "auto",
-                              asset_ip: str = ""):
+                              asset_ip: str = "",
+                              user: CurrentUser = Depends(_writer)):
     """
     Ingestione di un report di scanner ESTERNO (capability ASPM: aggregazione).
     Body: JSON grezzo del report (Trivy/Grype/Semgrep JSON, Nuclei JSON/JSONL).
@@ -192,9 +501,19 @@ async def api_findings_import(request: Request, tool: str = "auto",
     except IngestError as exc:
         return JSONResponse({"error": str(exc),
                              "supported": list(SUPPORTED_TOOLS)}, status_code=400)
+    # Editor: scarta (con conteggio) i finding riferiti ad asset fuori dal cono
+    # di visibilita', invece di rifiutare l'intero batch (le pipeline CI non
+    # si rompono su report a host misti).
+    skipped_out_of_scope = 0
+    scope_ips = visible_asset_ips(user)
+    if scope_ips is not None:
+        in_scope = [f for f in normalized if (f.get("asset_ip") or "") in scope_ips]
+        skipped_out_of_scope = len(normalized) - len(in_scope)
+        normalized = in_scope
     if not normalized:
         return {"ok": True, "tool": detected, "parsed": 0,
-                "new": 0, "updated": 0, "reopened": 0}
+                "new": 0, "updated": 0, "reopened": 0,
+                "skipped_out_of_scope": skipped_out_of_scope}
     fps = [fingerprint(f) for f in normalized]
     existing = fetch_findings_by_fps(list(set(fps)))
     if existing is None:
@@ -203,15 +522,24 @@ async def api_findings_import(request: Request, tool: str = "auto",
                                  cfg_sla=load_config().get("sla"))
     if not upsert_findings(rows):
         return JSONResponse({"error": "Persistenza fallita"}, status_code=503)
-    return {"ok": True, "tool": detected, "parsed": len(normalized), **stats}
+    return {"ok": True, "tool": detected, "parsed": len(normalized),
+            "skipped_out_of_scope": skipped_out_of_scope, **stats}
 
 
 @app.patch("/api/findings/{finding_id}/status")
-async def api_findings_status(finding_id: int, request: Request):
+async def api_findings_status(finding_id: int, request: Request,
+                              user: CurrentUser = Depends(_writer)):
     """
     Transizione di stato del workflow. Body: {status, note?}.
     Stati validi: open | triaged | accepted | fixed.
+    Editor: solo su finding di asset nel proprio cono di visibilita'.
     """
+    if user.scoped:
+        f = fetch_finding(finding_id)
+        if f is None:
+            return JSONResponse({"error": "Invalid id or DB unreachable"},
+                                status_code=404)
+        _require_ip_in_scope(user, f.get("asset_ip") or "")
     body = await request.json()
     status = (body.get("status") or "").strip().lower()
     if status not in STATUSES:
@@ -224,15 +552,17 @@ async def api_findings_status(finding_id: int, request: Request):
 
 
 @app.post("/api/findings/{finding_id}/ticket")
-def api_findings_ticket(finding_id: int):
+def api_findings_ticket(finding_id: int, user: CurrentUser = Depends(_writer)):
     """
     Crea un ticket di remediation (GitHub Issue / Jira) per il finding e ne
     salva il riferimento. Provider e credenziali in config.json ('ticketing').
+    Editor: solo su finding di asset nel proprio cono di visibilita'.
     """
     f = fetch_finding(finding_id)
     if f is None:
         return JSONResponse({"error": "Finding non trovato o DB non raggiungibile"},
                             status_code=404)
+    _require_ip_in_scope(user, f.get("asset_ip") or "")
     if f.get("ticket_url"):
         return {"ok": True, "already": True,
                 "ref": f.get("ticket_ref"), "url": f.get("ticket_url")}
@@ -245,7 +575,8 @@ def api_findings_ticket(finding_id: int):
 
 
 @app.post("/api/findings/scan-local")
-async def api_findings_scan_local(request: Request):
+async def api_findings_scan_local(request: Request,
+                                  user: CurrentUser = Depends(_writer)):
     """
     Esegue uno scanner LOCALE (binario opzionale sul server) e ne ingerisce
     il report nel ciclo di vita unificato.
@@ -253,6 +584,8 @@ async def api_findings_scan_local(request: Request):
            "asset_ip": "<opzionale>"}.
       - secrets -> gitleaks sulla directory 'target'
       - image   -> trivy (vuln + secret) sull'immagine container 'target'
+    Editor: 'asset_ip' obbligatorio e dentro il cono di visibilita' (i finding
+    devono restare attribuibili a un asset assegnato).
     """
     body = await request.json()
     scan_type = (body.get("type") or "").strip().lower()
@@ -260,6 +593,11 @@ async def api_findings_scan_local(request: Request):
     asset_ip = (body.get("asset_ip") or "").strip()
     if not target:
         return JSONResponse({"error": "Missing target"}, status_code=400)
+    if user.scoped:
+        if not asset_ip:
+            raise Forbidden("Per il ruolo editor 'asset_ip' e' obbligatorio "
+                            "(deve essere un asset assegnato)")
+        _require_ip_in_scope(user, asset_ip)
     try:
         if scan_type == "secrets":
             raw, tool = run_gitleaks(target), "gitleaks"
@@ -311,26 +649,26 @@ def _sync_posture_findings(report: dict) -> None:
 
 
 @app.get("/intel", response_class=HTMLResponse)
-def intel_page(request: Request):
+def intel_page(request: Request, user: CurrentUser = Depends(get_current_user)):
     """Pagina INTEL: dashboard Full Posture (ASPM-style)."""
     return templates.TemplateResponse("intel.html", {"request": request})
 
 
 @app.get("/risk", response_class=HTMLResponse)
-def risk_page(request: Request):
+def risk_page(request: Request, user: CurrentUser = Depends(get_current_user)):
     """Pagina RISK: prioritizzazione contestuale (EPSS/KEV + contesto + trend)."""
     return templates.TemplateResponse("risk.html", {"request": request})
 
 
 @app.get("/settings", response_class=HTMLResponse)
-def settings_page(request: Request):
-    """Pagina di configurazione dell'applicativo."""
+def settings_page(request: Request, user: CurrentUser = Depends(_admin_manager)):
+    """Pagina di configurazione dell'applicativo (admin: scrittura; manager: lettura)."""
     return templates.TemplateResponse("settings.html", {"request": request})
 
 
 @app.get("/api/settings")
-def api_settings_get():
-    """Legge la configurazione corrente."""
+def api_settings_get(user: CurrentUser = Depends(_admin_manager)):
+    """Legge la configurazione corrente (admin e manager)."""
     cfg = load_config()
     # Non esporre mai la chiave API in chiaro: maschera se presente.
     masked = json.loads(json.dumps(cfg))
@@ -342,12 +680,15 @@ def api_settings_get():
         masked["ticketing"]["github_token"] = "••••••••"
     if masked.get("ticketing", {}).get("jira_api_token"):
         masked["ticketing"]["jira_api_token"] = "••••••••"
+    if masked.get("smtp", {}).get("password"):
+        masked["smtp"]["password"] = "••••••••"
     return masked
 
 
 @app.post("/api/settings")
-async def api_settings_post(request: Request):
-    """Aggiorna la configurazione. Merge parziale per sezione."""
+async def api_settings_post(request: Request,
+                            user: CurrentUser = Depends(_admin_only)):
+    """Aggiorna la configurazione. Merge parziale per sezione. SOLO admin."""
     try:
         body = await request.json()
     except Exception:
@@ -375,7 +716,7 @@ async def api_settings_post(request: Request):
 
 
 @app.get("/api/ollama/models")
-def api_ollama_models():
+def api_ollama_models(user: CurrentUser = Depends(_admin_manager)):
     """Lista modelli disponibili su Ollama (GET /api/tags). [] se offline."""
     import requests as _req
     from urllib.parse import urlparse
@@ -392,7 +733,8 @@ def api_ollama_models():
 
 
 @app.get("/api/posture/scan")
-def api_posture_scan(ips: str | None = None):
+def api_posture_scan(ips: str | None = None,
+                     user: CurrentUser = Depends(_writer)):
     """
     Avvio MANUALE della Full Posture: per ogni asset raccoglie l'inventario
     pacchetti e lo valuta con OSV. Streaming SSE: 'run', 'asset'*, 'done'.
@@ -400,8 +742,10 @@ def api_posture_scan(ips: str | None = None):
 
     'ips' (opzionale): lista IP/host separati da virgola -> scansiona solo quelli.
     Assente/vuoto => tutti gli asset dell'inventario.
+    Editor: scansiona solo gli asset del proprio cono di visibilita'.
     """
     selected = {s.strip() for s in (ips or "").split(",") if s.strip()}
+    scope_ids = visible_asset_ids(user)
 
     def stream():
         try:
@@ -411,6 +755,8 @@ def api_posture_scan(ips: str | None = None):
             return
         # Esclude gli asset disabilitati in inventario dalla scansione di postura.
         assets = [a for a in assets if a.enabled]
+        if scope_ids is not None:
+            assets = [a for a in assets if a.id in scope_ids]
         if selected:
             assets = [a for a in assets if a.ip in selected]
         if not assets:
@@ -444,22 +790,29 @@ def api_posture_scan(ips: str | None = None):
 
 
 @app.get("/api/posture/cve")
-def api_posture_cve(package: str, ecosystem: str | None = None, version: str | None = None):
+def api_posture_cve(package: str, ecosystem: str | None = None,
+                    version: str | None = None,
+                    user: CurrentUser = Depends(get_current_user)):
     """Lista COMPLETA di id CVE per (pacchetto, ecosistema, versione) — 'show more' posture."""
     return query_osv_ecosystem(package, ecosystem, version)
 
 
 @app.get("/api/posture")
-def api_posture(run_id: int | None = None):
-    """Ritorna una run di postura (ultima se run_id assente) con asset+findings."""
+def api_posture(run_id: int | None = None,
+                user: CurrentUser = Depends(get_current_user)):
+    """
+    Ritorna una run di postura (ultima se run_id assente) con asset+findings.
+    Editor: solo gli asset del proprio cono di visibilita'.
+    """
     data = fetch_posture(run_id)
     if data is None:
         return JSONResponse({"error": "Supabase unreachable", "run": {}}, status_code=503)
+    data = _filter_posture_run(data, visible_asset_ips(user))
     return {"run": data}
 
 
 @app.get("/api/posture/runs")
-def api_posture_runs():
+def api_posture_runs(user: CurrentUser = Depends(get_current_user)):
     """Elenco storico delle run di postura."""
     data = fetch_posture_runs()
     if data is None:
@@ -468,7 +821,8 @@ def api_posture_runs():
 
 
 @app.get("/api/risk")
-def api_risk(run_id: int | None = None, probe: bool = True):
+def api_risk(run_id: int | None = None, probe: bool = True,
+             user: CurrentUser = Depends(get_current_user)):
     """
     Rischio CONTESTUALE di una run di postura (ultima se run_id assente).
 
@@ -477,45 +831,61 @@ def api_risk(run_id: int | None = None, probe: bool = True):
     (ambiente, internet-facing, criticita' dall'inventario).
 
     'probe=false' salta la sonda TCP delle porte (piu' veloce, no reachability).
+    Editor: il rischio e' RICALCOLATO sul solo cono di visibilita' (gli
+    aggregati non rivelano nulla degli asset non assegnati).
     """
     run = fetch_posture(run_id)
     if run is None:
         return JSONResponse({"error": "Supabase unreachable"}, status_code=503)
     if not run:
         return {"risk": {"assets": [], "summary": {}, "meta": {}}}
+    scope_ips = visible_asset_ips(user)
+    run = _filter_posture_run(run, scope_ips)
     try:
         assets = load_assets(ASSETS_FILE)
         ctx = {a.ip: {"id": a.id, "environment": a.environment,
                       "internet_facing": a.internet_facing,
-                      "criticality": a.criticality} for a in assets}
+                      "criticality": a.criticality} for a in assets
+               if scope_ips is None or a.ip in scope_ips}
     except AssetStoreError:
         ctx = {}
     return {"risk": assess_run_risk(run, ctx, probe=probe)}
 
 
 @app.get("/api/risk/trend")
-def api_risk_trend():
+def api_risk_trend(user: CurrentUser = Depends(get_current_user)):
     """
     Serie storica del rischio (score/CVE per run) + delta finding-level fra le
     due run piu' recenti (nuove vs risolte). 503 se il DB non risponde.
+    Editor: il delta e' calcolato sul solo cono di visibilita'; nella serie
+    storica i contatori globali per-run vengono omessi (nessun leak indiretto).
     """
     runs = fetch_posture_runs()
     if runs is None:
         return JSONResponse({"error": "Supabase unreachable"}, status_code=503)
+    scope_ips = visible_asset_ips(user)
+    if scope_ips is not None:
+        # Gli aggregati per-run (avg_score, total_vulns) sono globali: per gli
+        # editor si mantengono solo id/data delle run nella serie.
+        runs = [{"id": r.get("id"), "created_at": r.get("created_at")}
+                for r in runs]
     current = previous = None
     if len(runs) >= 1:
-        current = fetch_posture(runs[0].get("id"))
+        current = _filter_posture_run(fetch_posture(runs[0].get("id")), scope_ips)
     if len(runs) >= 2:
-        previous = fetch_posture(runs[1].get("id"))
+        previous = _filter_posture_run(fetch_posture(runs[1].get("id")), scope_ips)
     return {"trend": compute_trend(runs, current, previous)}
 
 
 @app.patch("/api/assets/{index}/context")
-async def api_assets_context(index: int, request: Request):
+async def api_assets_context(index: int, request: Request,
+                             user: CurrentUser = Depends(_writer)):
     """
     Aggiorna il contesto business di un asset (per la prioritizzazione del rischio).
     Body (tutti opzionali): {environment, internet_facing, criticality}.
+    Editor: solo su asset del proprio cono di visibilita'.
     """
+    _require_asset_in_scope(user, index)
     body = await request.json()
     row = {}
     if "environment" in body:
@@ -539,9 +909,11 @@ async def api_assets_context(index: int, request: Request):
 
 
 @app.get("/api/audit")
-def api_audit():
+def api_audit(user: CurrentUser = Depends(_writer)):
     """
     Storico scansioni (scans + scan_results annidati) letto da Supabase.
+    Admin e manager: tutto. Editor: solo i risultati relativi agli asset del
+    proprio cono di visibilita'. Viewer: 403.
     503 se il DB non e' raggiungibile (la UI mostra un messaggio dedicato).
     """
     data = fetch_audit()
@@ -550,6 +922,15 @@ def api_audit():
             {"error": "Supabase unreachable", "scans": []},
             status_code=503,
         )
+    scope_ips = visible_asset_ips(user)
+    if scope_ips is not None:
+        filtered = []
+        for scan in data:
+            results = [r for r in (scan.get("scan_results") or [])
+                       if (r.get("ip") or "") in scope_ips]
+            if results:
+                filtered.append({**scan, "scan_results": results})
+        data = filtered
     return {"scans": data}
 
 
@@ -616,11 +997,15 @@ def _check_ssh(asset: Asset, timeout: float = 3.0) -> bool:
 
 
 @app.get("/api/asset/health")
-def api_asset_health(host: str, index: int | None = None):
+def api_asset_health(host: str, index: int | None = None,
+                     user: CurrentUser = Depends(get_current_user)):
     """
     Raggiungibilita' TCP + (se index fornito e asset ha credenziali) login SSH.
     Risposta: {reachable, ssh_ok}  — ssh_ok=null se nessuna credenziale.
+    Editor: solo per asset del proprio cono di visibilita'.
     """
+    if user.scoped and index is not None:
+        _require_asset_in_scope(user, index)
     h = _normalize_host(host)
     if not h:
         return {"host": host, "reachable": False, "ssh_ok": None}
@@ -644,7 +1029,8 @@ def api_asset_health(host: str, index: int | None = None):
 
 @app.get("/api/cve")
 def api_cve(product: str, version: str | None = None,
-            os_type: str | None = None, os_major_version: str | None = None):
+            os_type: str | None = None, os_major_version: str | None = None,
+            user: CurrentUser = Depends(get_current_user)):
     """
     Lista COMPLETA di id CVE (OSV) per (prodotto, versione).
     Usato dal 'show more' della pagina Audit per espandere oltre i 10 salvati.
@@ -656,14 +1042,44 @@ def api_cve(product: str, version: str | None = None,
     return query_osv_ids(product, version, ecosystem=eco)
 
 
+def _scope_filter_assets(assets: list, user: CurrentUser) -> list:
+    """Applica il cono di visibilita' all'inventario (editor: solo assegnati)."""
+    ids = visible_asset_ids(user)
+    if ids is None:
+        return assets
+    return [a for a in assets if a.id in ids]
+
+
+def _assignments_by_asset() -> dict:
+    """{asset_id: [{'type','id','name'}]} per la colonna ASSEGNATO A della UI."""
+    rows = db.fetch_all_assignments() or []
+    out: dict = {}
+    for r in rows:
+        if r.get("user_id") is not None:
+            entry = {"type": "user", "id": r["user_id"],
+                     "name": (r.get("users") or {}).get("username", "?")}
+        else:
+            entry = {"type": "group", "id": r["group_id"],
+                     "name": (r.get("groups") or {}).get("name", "?")}
+        out.setdefault(r["asset_id"], []).append(entry)
+    return out
+
+
 @app.get("/api/assets")
-def api_assets():
-    """Ritorna l'inventario interpretato (senza password)."""
+def api_assets(user: CurrentUser = Depends(get_current_user)):
+    """
+    Ritorna l'inventario interpretato (senza password).
+    Editor: solo asset assegnati. Viewer: username redatto.
+    """
     try:
-        assets = load_assets(ASSETS_FILE)
+        assets = _scope_filter_assets(load_assets(ASSETS_FILE), user)
     except AssetStoreError as exc:
         return JSONResponse({"error": str(exc)}, status_code=503)
-    return {"assets": [a.to_dict() for a in assets]}
+    out = [a.to_dict() for a in assets]
+    if user.role == "viewer":
+        for d in out:
+            d["username"] = None
+    return {"assets": out}
 
 
 def _asset_full(a: Asset) -> dict:
@@ -685,18 +1101,37 @@ def _asset_full(a: Asset) -> dict:
 
 
 @app.get("/api/assets/all")
-def api_assets_all():
-    """Inventario completo (password inclusa) per la gestione CRUD."""
+def api_assets_all(user: CurrentUser = Depends(get_current_user)):
+    """
+    Inventario completo per la gestione CRUD, con le assegnazioni
+    utente/gruppo di ogni asset (cono di visibilita').
+    Editor: solo asset assegnati. Viewer: username redatto.
+    """
     try:
-        assets = load_assets(ASSETS_FILE)
+        assets = _scope_filter_assets(load_assets(ASSETS_FILE), user)
     except AssetStoreError as exc:
         return JSONResponse({"error": str(exc)}, status_code=503)
-    return {"assets": [_asset_full(a) for a in assets]}
+    assign = _assignments_by_asset()
+    out = []
+    for a in assets:
+        d = _asset_full(a)
+        d["assignments"] = assign.get(a.id, [])
+        if user.role == "viewer":
+            d["username"] = ""
+            d["has_password"] = False
+        out.append(d)
+    return {"assets": out}
 
 
 @app.post("/api/assets")
-async def api_assets_create(request: Request):
-    """Aggiunge un asset all'inventario. Body: {ip, username, password}."""
+async def api_assets_create(request: Request,
+                            user: CurrentUser = Depends(_writer)):
+    """
+    Aggiunge un asset all'inventario. Body: {ip, username, password}.
+    Editor: l'asset creato viene AUTO-ASSEGNATO a lui (o a un suo gruppo se il
+    body indica 'assign_group_id'), cosi' non puo' creare asset orfani ne'
+    fuori dal proprio cono di visibilita'.
+    """
     body = await request.json()
     ip = (body.get("ip") or "").strip()
     if not ip:
@@ -704,6 +1139,10 @@ async def api_assets_create(request: Request):
     os_type = (body.get("os_type") or "").strip().lower()
     if os_type not in ("linux", "windows"):
         return JSONResponse({"error": "OS type required (linux or windows)"}, status_code=400)
+    assign_group = body.get("assign_group_id")
+    if user.scoped and assign_group is not None \
+            and int(assign_group) not in user.group_ids:
+        raise Forbidden("Non appartieni al gruppo indicato")
     plain_pw = (body.get("password") or "").strip()
     try:
         stored_pw = encrypt_password(plain_pw) if plain_pw else ""
@@ -719,12 +1158,42 @@ async def api_assets_create(request: Request):
     ))
     if new_id is None:
         return JSONResponse({"error": "Supabase non raggiungibile"}, status_code=503)
+    if user.scoped:
+        if assign_group is not None:
+            db.add_asset_assignment(new_id, group_id=int(assign_group))
+        else:
+            db.add_asset_assignment(new_id, user_id=user.id)
     return {"ok": True, "index": new_id}
 
 
+@app.put("/api/assets/{index}/assignments")
+async def api_assets_assignments(index: int, request: Request,
+                                 user: CurrentUser = Depends(_admin_manager)):
+    """
+    Sostituisce le assegnazioni utente/gruppo dell'asset (cono di visibilita').
+    Body: {"user_ids": [..], "group_ids": [..]}. Solo admin e manager:
+    l'editor non puo' riassegnare (rischio self-escalation su asset altrui).
+    """
+    body = await request.json()
+    user_ids = body.get("user_ids") or []
+    group_ids = body.get("group_ids") or []
+    try:
+        current = get_asset(index, ASSETS_FILE)
+    except AssetStoreError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=503)
+    if current is None:
+        return JSONResponse({"error": "Invalid index"}, status_code=404)
+    if not db.set_asset_assignments(index, user_ids, group_ids):
+        return JSONResponse({"error": "Supabase non raggiungibile"}, status_code=503)
+    return {"ok": True, "user_ids": user_ids, "group_ids": group_ids}
+
+
 @app.put("/api/assets/{index}")
-async def api_assets_update(index: int, request: Request):
-    """Aggiorna l'asset indicato (index = id Supabase). Body: {ip, username, password}."""
+async def api_assets_update(index: int, request: Request,
+                            user: CurrentUser = Depends(_writer)):
+    """Aggiorna l'asset indicato (index = id Supabase). Body: {ip, username, password}.
+    Editor: solo asset del proprio cono di visibilita'."""
+    _require_asset_in_scope(user, index)
     body = await request.json()
     ip = (body.get("ip") or "").strip()
     if not ip:
@@ -768,8 +1237,11 @@ async def api_assets_update(index: int, request: Request):
 
 
 @app.patch("/api/assets/{index}/enabled")
-async def api_assets_toggle(index: int, request: Request):
-    """Abilita/disabilita un asset per le scansioni. Body: {enabled: bool}."""
+async def api_assets_toggle(index: int, request: Request,
+                            user: CurrentUser = Depends(_writer)):
+    """Abilita/disabilita un asset per le scansioni. Body: {enabled: bool}.
+    Editor: solo asset del proprio cono di visibilita'."""
+    _require_asset_in_scope(user, index)
     body = await request.json()
     enabled = bool(body.get("enabled", True))
     if not set_asset_enabled(index, enabled):
@@ -778,15 +1250,245 @@ async def api_assets_toggle(index: int, request: Request):
 
 
 @app.delete("/api/assets/{index}")
-def api_assets_delete(index: int):
-    """Elimina l'asset indicato (index = id Supabase)."""
+def api_assets_delete(index: int, user: CurrentUser = Depends(_writer)):
+    """Elimina l'asset indicato (index = id Supabase).
+    Editor: solo asset del proprio cono di visibilita'."""
+    _require_asset_in_scope(user, index)
     if not delete_asset(index):
         return JSONResponse({"error": "Invalid index"}, status_code=404)
     return {"ok": True}
 
 
+# ---------------------------------------------------------------------------
+# AMMINISTRAZIONE UTENTI E GRUPPI (cono di visibilita')
+# ---------------------------------------------------------------------------
+
+@app.get("/admin", response_class=HTMLResponse)
+def admin_page(request: Request, user: CurrentUser = Depends(_admin_only)):
+    """Pagina ADMIN: gestione utenti, gruppi e membership. Solo admin."""
+    return templates.TemplateResponse("admin.html", {"request": request})
+
+
+@app.get("/api/users")
+def api_users_list(user: CurrentUser = Depends(_admin_manager)):
+    """Elenco utenti (senza hash password). Admin e manager (il manager ne ha
+    bisogno per assegnare gli asset); le scritture restano solo admin."""
+    users = db.fetch_users()
+    if users is None:
+        return JSONResponse({"error": "Supabase unreachable"}, status_code=503)
+    return {"users": users}
+
+
+def _send_invite(user_row: dict) -> dict:
+    """
+    Genera il token di attivazione e invia (o espone) il link.
+    SMTP configurato -> email; SMTP assente -> il link torna all'admin nella
+    risposta per la consegna manuale. La password non viaggia MAI via email.
+    """
+    token = create_onetime_token(user_row["id"], "activation")
+    if token is None:
+        return {"error": "Supabase non raggiungibile"}
+    link = activation_link(token)
+    if smtp_enabled() and user_row.get("email"):
+        try:
+            send_activation(user_row["email"], user_row["username"], token)
+            return {"sent": True, "email": user_row["email"]}
+        except MailError as exc:
+            logger.warning("send_activation fallita: %s", exc)
+            return {"sent": False, "activation_link": link,
+                    "warning": f"Email non inviata ({exc}); consegna il link manualmente."}
+    return {"sent": False, "activation_link": link,
+            "warning": "SMTP non configurato: consegna il link manualmente."}
+
+
+@app.post("/api/users")
+async def api_users_create(request: Request,
+                           user: CurrentUser = Depends(_admin_only)):
+    """
+    Crea un utente INVITATO. Body: {username, email, role}.
+    Nessuna password: l'utente la sceglie via link di attivazione one-time
+    (l'apertura del link valida anche l'email). Solo admin.
+    Retro-compatibilita': se il body contiene 'password' l'utente e' creato
+    attivo, ma con cambio password forzato al primo accesso.
+    """
+    body = await request.json()
+    username = (body.get("username") or "").strip()
+    email = (body.get("email") or "").strip().lower()
+    password = body.get("password") or ""
+    role = (body.get("role") or "viewer").strip().lower()
+    if not username:
+        return JSONResponse({"error": "username obbligatorio"}, status_code=400)
+    if role not in ROLES:
+        return JSONResponse({"error": f"Ruolo non valido: {role}",
+                             "valid": list(ROLES)}, status_code=400)
+    if not password and (not email or "@" not in email):
+        return JSONResponse({"error": "email valida obbligatoria per l'invito "
+                             "(oppure fornisci una password provvisoria)"},
+                            status_code=400)
+    row = {"username": username, "role": role, "email": email or None}
+    if password:
+        row.update({"password_hash": hash_password(password),
+                    "is_active": True, "must_change_password": True})
+    else:
+        row.update({"password_hash": None, "is_active": False})
+    new_id = db.insert_user(row)
+    if new_id is None:
+        return JSONResponse({"error": "Creazione fallita (username/email duplicati o DB non raggiungibile)"},
+                            status_code=409)
+    out = {"ok": True, "id": new_id}
+    if not password:
+        invite = _send_invite({"id": new_id, "username": username, "email": email})
+        if "error" in invite:
+            return JSONResponse(invite, status_code=503)
+        out.update(invite)
+    return out
+
+
+@app.post("/api/users/{user_id}/invite")
+def api_users_reinvite(user_id: int, user: CurrentUser = Depends(_admin_only)):
+    """Reinvia l'invito di attivazione (brucia i token precedenti). Solo admin."""
+    target = db.fetch_user(user_id)
+    if not target:
+        return JSONResponse({"error": "Utente non trovato"}, status_code=404)
+    if target.get("is_active") and target.get("password_hash"):
+        return JSONResponse({"error": "Utente gia' attivo"}, status_code=400)
+    invite = _send_invite(target)
+    if "error" in invite:
+        return JSONResponse(invite, status_code=503)
+    return {"ok": True, **invite}
+
+
+@app.post("/api/users/{user_id}/reset")
+def api_users_reset(user_id: int, user: CurrentUser = Depends(_admin_only)):
+    """
+    Invia un link di reset password all'utente (l'admin non conosce mai la
+    password altrui). Solo admin.
+    """
+    target = db.fetch_user(user_id)
+    if not target:
+        return JSONResponse({"error": "Utente non trovato"}, status_code=404)
+    if not target.get("is_active"):
+        return JSONResponse({"error": "Utente non attivo: usa il reinvio invito"},
+                            status_code=400)
+    token = create_onetime_token(user_id, "reset")
+    if token is None:
+        return JSONResponse({"error": "Supabase non raggiungibile"}, status_code=503)
+    link = activation_link(token)
+    if smtp_enabled() and target.get("email"):
+        try:
+            send_reset(target["email"], target["username"], token)
+            return {"ok": True, "sent": True, "email": target["email"]}
+        except MailError as exc:
+            logger.warning("send_reset fallita: %s", exc)
+            return {"ok": True, "sent": False, "reset_link": link,
+                    "warning": f"Email non inviata ({exc}); consegna il link manualmente."}
+    return {"ok": True, "sent": False, "reset_link": link,
+            "warning": "SMTP non configurato o email assente: consegna il link manualmente."}
+
+
+@app.put("/api/users/{user_id}")
+async def api_users_update(user_id: int, request: Request,
+                           user: CurrentUser = Depends(_admin_only)):
+    """Aggiorna ruolo e/o password di un utente. Body: {role?, password?}."""
+    body = await request.json()
+    row = {}
+    role = (body.get("role") or "").strip().lower()
+    if role:
+        if role not in ROLES:
+            return JSONResponse({"error": f"Ruolo non valido: {role}",
+                                 "valid": list(ROLES)}, status_code=400)
+        row["role"] = role
+    if body.get("password"):
+        # Password impostata dall'admin = provvisoria: cambio forzato al
+        # prossimo accesso (l'admin non deve conoscere la password d'uso).
+        row["password_hash"] = hash_password(body["password"])
+        row["must_change_password"] = True
+        row["is_active"] = True
+    if not row:
+        return JSONResponse({"error": "Niente da aggiornare"}, status_code=400)
+    # L'ultimo admin non puo' auto-degradarsi: lockout garantito.
+    if row.get("role") and row["role"] != "admin":
+        target = db.fetch_user(user_id)
+        if target and target["role"] == "admin":
+            admins = [u for u in (db.fetch_users() or []) if u["role"] == "admin"]
+            if len(admins) <= 1:
+                return JSONResponse({"error": "Impossibile rimuovere l'ultimo admin"},
+                                    status_code=400)
+    if not db.update_user(user_id, row):
+        return JSONResponse({"error": "Invalid id or DB unreachable"}, status_code=404)
+    return {"ok": True}
+
+
+@app.delete("/api/users/{user_id}")
+def api_users_delete(user_id: int, user: CurrentUser = Depends(_admin_only)):
+    """Elimina un utente (assegnazioni e membership cascano). Solo admin."""
+    if user_id == user.id:
+        return JSONResponse({"error": "Non puoi eliminare il tuo stesso utente"},
+                            status_code=400)
+    target = db.fetch_user(user_id)
+    if target and target["role"] == "admin":
+        admins = [u for u in (db.fetch_users() or []) if u["role"] == "admin"]
+        if len(admins) <= 1:
+            return JSONResponse({"error": "Impossibile eliminare l'ultimo admin"},
+                                status_code=400)
+    if not db.delete_user(user_id):
+        return JSONResponse({"error": "Invalid id or DB unreachable"}, status_code=404)
+    return {"ok": True}
+
+
+@app.get("/api/groups")
+def api_groups_list(user: CurrentUser = Depends(_writer)):
+    """
+    Elenco gruppi con membri. Admin e manager: tutti i gruppi.
+    Editor: solo i gruppi a cui appartiene.
+    """
+    groups = db.fetch_groups()
+    if groups is None:
+        return JSONResponse({"error": "Supabase unreachable"}, status_code=503)
+    out = [{"id": g["id"], "name": g["name"],
+            "member_ids": [m["user_id"] for m in (g.get("user_groups") or [])]}
+           for g in groups]
+    if user.scoped:
+        out = [g for g in out if g["id"] in user.group_ids]
+    return {"groups": out}
+
+
+@app.post("/api/groups")
+async def api_groups_create(request: Request,
+                            user: CurrentUser = Depends(_admin_only)):
+    """Crea un gruppo. Body: {name}. Solo admin."""
+    body = await request.json()
+    name = (body.get("name") or "").strip()
+    if not name:
+        return JSONResponse({"error": "Nome gruppo obbligatorio"}, status_code=400)
+    new_id = db.insert_group(name)
+    if new_id is None:
+        return JSONResponse({"error": "Creazione fallita (nome duplicato o DB non raggiungibile)"},
+                            status_code=409)
+    return {"ok": True, "id": new_id}
+
+
+@app.delete("/api/groups/{group_id}")
+def api_groups_delete(group_id: int, user: CurrentUser = Depends(_admin_only)):
+    """Elimina un gruppo (membership e assegnazioni cascano). Solo admin."""
+    if not db.delete_group(group_id):
+        return JSONResponse({"error": "Invalid id or DB unreachable"}, status_code=404)
+    return {"ok": True}
+
+
+@app.put("/api/groups/{group_id}/members")
+async def api_groups_members(group_id: int, request: Request,
+                             user: CurrentUser = Depends(_admin_only)):
+    """Sostituisce la membership del gruppo. Body: {user_ids: [..]}. Solo admin."""
+    body = await request.json()
+    if not db.set_group_members(group_id, body.get("user_ids") or []):
+        return JSONResponse({"error": "Invalid id or DB unreachable"}, status_code=503)
+    return {"ok": True}
+
+
 @app.post("/api/identify")
-async def api_identify(request: Request):
+async def api_identify(request: Request,
+                       user: CurrentUser = Depends(_writer)):
     """
     Identifica il software impattato dalla descrizione testuale.
     Body JSON: {"description": "...", "use_osint": true|false}
@@ -803,14 +1505,17 @@ async def api_identify(request: Request):
 
 @app.get("/api/scan")
 def api_scan(description: str, use_osint: bool = True, lang: str = "en",
-             deep: bool = False):
+             deep: bool = False, user: CurrentUser = Depends(_writer)):
     """
     Esegue la scansione e trasmette i risultati in streaming (SSE).
     Ogni messaggio 'data:' e' un JSON con l'esito di un singolo asset.
     Eventi finali: 'target' (prodotto identificato) e 'done'.
 
     'lang' (default 'en') seleziona la lingua della sintesi CVE generata dall'LLM.
+    Editor: scansiona solo gli asset del proprio cono di visibilita'.
     """
+    scope_ids = visible_asset_ids(user)
+
     def event_stream():
         try:
             yield from _event_stream_inner()
@@ -838,6 +1543,9 @@ def api_scan(description: str, use_osint: bool = True, lang: str = "en",
             return
         # Esclude gli asset disabilitati in inventario dalla scansione.
         assets = [a for a in assets if a.enabled]
+        # Cono di visibilita': l'editor scansiona solo gli asset assegnati.
+        if scope_ids is not None:
+            assets = [a for a in assets if a.id in scope_ids]
 
         # 2b. ADVISORY AI: se il prodotto e' noto ma l'input NON contiene una
         #     versione (vulnerabilita' generica senza CVE), chiedo all'LLM di

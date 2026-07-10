@@ -50,6 +50,23 @@ _DEFAULTS: dict = {
         "jira_api_token": "",
         "jira_project_key": "",
     },
+    # SMTP per email di invito/attivazione e reset password.
+    "smtp": {
+        "host": "",              # vuoto = email disabilitate (invito manuale)
+        "port": 587,
+        "username": "",
+        "password": "",
+        "use_tls": True,         # STARTTLS
+        "from_addr": "",         # mittente (default = username)
+        "base_url": "http://localhost:8000",  # base dei link nelle email
+    },
+    # Policy di autenticazione.
+    "auth": {
+        "rotation_days": 0,      # 0 = rotation disattivata (raccomandazione NIST 800-63B)
+        "min_password_len": 12,
+        "invite_ttl_hours": 48,  # validita' del link di attivazione
+        "reset_ttl_hours": 4,    # validita' del link di reset
+    },
     # Giorni di SLA remediation per severita' (ciclo di vita findings).
     "sla": {
         "critical": 7,

@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html class="light" lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+  <title>VULN.SCAN.IO · Admin</title>
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
+  <link href="https://fonts.googleapis.com" rel="preconnect" />
+  <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&amp;family=JetBrains+Mono:wght@400;500;700&amp;display=swap"
+    rel="stylesheet" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
+    rel="stylesheet" />
+  <script src="/static/vendor/tailwind.js"></script>
+  <script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": { "surface-tint": "#00daf3", "error": "#ef4444", "on-background": "#0f172a", "primary-fixed-dim": "#06b6d4", "on-surface-variant": "#64748b", "on-surface": "#1e293b", "background": "#ffffff" },
+          "borderRadius": { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "1rem", "full": "9999px" },
+          "spacing": { "base-unit": "4px", "gutter": "16px", "margin-desktop": "32px", "margin-mobile": "16px", "panel-padding": "24px" },
+          "fontFamily": { "code-sm": ["JetBrains Mono"], "headline-md": ["Inter"], "display-lg": ["Inter"], "code-lg": ["JetBrains Mono"], "label-caps": ["Inter"], "body-md": ["Inter"] },
+          "fontSize": {
+            "code-sm": ["13px", { "lineHeight": "18px", "fontWeight": "400" }],
+            "headline-md": ["20px", { "lineHeight": "28px", "fontWeight": "600" }],
+            "display-lg": ["48px", { "lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+            "code-lg": ["16px", { "lineHeight": "24px", "fontWeight": "500" }],
+            "label-caps": ["11px", { "lineHeight": "16px", "letterSpacing": "0.1em", "fontWeight": "700" }],
+            "body-md": ["15px", { "lineHeight": "24px", "fontWeight": "400" }]
+          }
+        },
+      },
+    }
+  </script>
+  <style>
+    .material-symbols-outlined { font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    .neural-panel {
+      background: rgba(255, 255, 255, 0.7);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.5);
+      box-shadow: 0 4px 24px -1px rgba(0, 0, 0, 0.05), 0 1px 2px -1px rgba(0, 0, 0, 0.03);
+    }
+    .shader-bg { position: fixed; inset: 0; z-index: -1; width: 100%; height: 100%; background: #ffffff; }
+    body { min-height: max(884px, 100dvh); }
+  </style>
+  <script src="/static/i18n.js?v=14"></script>
+</head>
+
+<body
+  class="bg-white text-on-background font-body-md text-body-md relative antialiased selection:bg-primary-fixed-dim/20 selection:text-primary-fixed-dim overflow-x-hidden">
+  <div class="shader-bg"></div>
+  {% set active_page = 'admin' %}
+  {% set crumbs = [
+    {'key': 'crumb.home', 'text': 'Home', 'href': '/'},
+    {'key': 'top.admin', 'text': 'Users & Groups'}
+  ] %}
+  {% include 'partials/topbar.html' %}
+  <div class="flex pt-16 h-screen w-full overflow-hidden">
+    {% include 'partials/sidebar.html' %}
+    <main class="flex-1 md:ml-64 p-4 md:p-8 overflow-y-auto pb-24 md:pb-8 relative w-full h-full">
+      <div class="mx-auto space-y-8">
+        <div>
+          <h2 class="font-display-lg text-3xl font-bold tracking-tight text-slate-900" data-i18n="admin.header">Users &amp; Groups</h2>
+          <p class="font-code-sm text-code-sm text-slate-500 mt-1"><span data-i18n="admin.subtitle">Roles and visibility cones —</span> <span
+              class="text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded">admin · manager · editor · viewer</span></p>
+        </div>
+
+        <!-- UTENTI -->
+        <section class="neural-panel p-6 rounded-2xl">
+          <h3 class="font-label-caps text-label-caps text-slate-500 mb-4 flex items-center gap-2">
+            <span class="material-symbols-outlined text-sm text-cyan-500">person_add</span> <span data-i18n="admin.users_title">USERS</span>
+          </h3>
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-2">
+            <input id="u-name" type="text" placeholder="username" data-i18n-ph="admin.ph_username"
+              class="bg-white/70 border border-slate-200 rounded-xl px-4 py-2.5 font-code-sm text-code-sm focus:outline-none focus:border-cyan-300 focus:ring-1 focus:ring-cyan-200 transition" />
+            <input id="u-email" type="email" placeholder="email (activation link)" data-i18n-ph="admin.ph_email"
+              class="bg-white/70 border border-slate-200 rounded-xl px-4 py-2.5 font-code-sm text-code-sm focus:outline-none focus:border-cyan-300 focus:ring-1 focus:ring-cyan-200 transition" />
+            <select id="u-role"
+              class="bg-white/70 border border-slate-200 rounded-xl px-4 py-2.5 font-code-sm text-code-sm focus:outline-none focus:border-cyan-300 focus:ring-1 focus:ring-cyan-200 transition">
+              <option value="viewer">viewer</option>
+              <option value="editor">editor</option>
+              <option value="manager">manager</option>
+              <option value="admin">admin</option>
+            </select>
+            <button id="u-create"
+              class="bg-slate-900 text-white hover:bg-slate-800 px-6 py-2.5 rounded-lg font-label-caps text-label-caps transition-all flex items-center justify-center gap-2 shadow-lg shadow-slate-900/10 disabled:opacity-40">
+              <span class="material-symbols-outlined text-sm text-cyan-400">outgoing_mail</span> <span data-i18n="admin.invite_btn">INVITE USER</span>
+            </button>
+          </div>
+          <p class="font-code-sm text-[11px] text-slate-400 mb-6" data-i18n="admin.invite_hint">
+            The user receives a one-time link to choose their own password
+            (opening the link also verifies the email). No password ever
+            travels by email or through the administrator. Without SMTP
+            configured, the link is shown here for manual delivery.
+          </p>
+          <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse">
+              <thead>
+                <tr class="border-b border-slate-200/70 bg-white/40">
+                  <th class="font-label-caps text-label-caps text-slate-500 px-5 py-3">#</th>
+                  <th class="font-label-caps text-label-caps text-slate-500 px-5 py-3" data-i18n="admin.th_username">USERNAME</th>
+                  <th class="font-label-caps text-label-caps text-slate-500 px-5 py-3" data-i18n="admin.th_email">EMAIL</th>
+                  <th class="font-label-caps text-label-caps text-slate-500 px-5 py-3" data-i18n="admin.th_status">STATUS</th>
+                  <th class="font-label-caps text-label-caps text-slate-500 px-5 py-3" data-i18n="admin.th_role">ROLE</th>
+                  <th class="font-label-caps text-label-caps text-slate-500 px-5 py-3" data-i18n="admin.th_groups">GROUPS</th>
+                  <th class="font-label-caps text-label-caps text-slate-500 px-5 py-3 text-right" data-i18n="admin.th_actions">ACTIONS</th>
+                </tr>
+              </thead>
+              <tbody id="u-rows" class="divide-y divide-slate-100/70"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- GRUPPI -->
+        <section class="neural-panel p-6 rounded-2xl">
+          <h3 class="font-label-caps text-label-caps text-slate-500 mb-4 flex items-center gap-2">
+            <span class="material-symbols-outlined text-sm text-cyan-500">groups</span> <span data-i18n="admin.groups_title">GROUPS</span>
+          </h3>
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+            <input id="g-name" type="text" placeholder="group name (e.g. team-infra)" data-i18n-ph="admin.ph_group"
+              class="md:col-span-3 bg-white/70 border border-slate-200 rounded-xl px-4 py-2.5 font-code-sm text-code-sm focus:outline-none focus:border-cyan-300 focus:ring-1 focus:ring-cyan-200 transition" />
+            <button id="g-create"
+              class="bg-slate-900 text-white hover:bg-slate-800 px-6 py-2.5 rounded-lg font-label-caps text-label-caps transition-all flex items-center justify-center gap-2 shadow-lg shadow-slate-900/10 disabled:opacity-40">
+              <span class="material-symbols-outlined text-sm text-cyan-400">add</span> <span data-i18n="admin.add_group">ADD GROUP</span>
+            </button>
+          </div>
+          <div id="g-list" class="space-y-4"></div>
+        </section>
+
+        <p id="toast" class="hidden font-code-sm text-code-sm px-4 py-2 rounded-lg"></p>
+      </div>
+    </main>
+  </div>
+  {% include 'partials/bottomnav.html' %}
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const toast = $('toast');
+    let users = [], groups = [];
+
+    function showToast(msg, ok = true) {
+      toast.textContent = msg;
+      toast.className = 'font-code-sm text-code-sm px-4 py-2 rounded-lg ' +
+        (ok ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+          : 'bg-rose-50 text-rose-700 border border-rose-200');
+      toast.classList.remove('hidden');
+      clearTimeout(showToast._t);
+      showToast._t = setTimeout(() => toast.classList.add('hidden'), 2600);
+    }
+    const esc = (s) => (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+
+    const ROLE_BADGE = {
+      admin: 'bg-rose-50 text-rose-700 border-rose-200',
+      manager: 'bg-cyan-50 text-cyan-700 border-cyan-200',
+      editor: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+      viewer: 'bg-slate-50 text-slate-500 border-slate-200',
+    };
+
+    async function apiJson(url, opts) {
+      const r = await fetch(url, opts);
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || ('HTTP ' + r.status));
+      return d;
+    }
+
+    function userGroups(uid) {
+      return groups.filter(g => (g.member_ids || []).includes(uid)).map(g => g.name);
+    }
+
+    function statusBadge(u) {
+      if (!u.is_active)
+        return `<span class="px-2 py-0.5 border border-amber-200 bg-amber-50 text-amber-700 font-label-caps text-[10px] rounded-full">${t('admin.status_pending')}</span>`;
+      const verified = !!u.email_verified_at;
+      const must = !!u.must_change_password;
+      let out = `<span class="px-2 py-0.5 border border-emerald-200 bg-emerald-50 text-emerald-700 font-label-caps text-[10px] rounded-full">${t('admin.status_active')}</span>`;
+      if (u.email) out += verified
+        ? ` <span title="${t('admin.badge_verified')}" class="material-symbols-outlined text-[13px] text-emerald-500 align-middle">verified</span>`
+        : ` <span title="${t('admin.badge_unverified')}" class="material-symbols-outlined text-[13px] text-amber-500 align-middle">unpublished</span>`;
+      if (must) out += ` <span title="${t('admin.badge_mustchange')}" class="material-symbols-outlined text-[13px] text-amber-500 align-middle">lock_reset</span>`;
+      return out;
+    }
+
+    function renderUsers() {
+      const rows = $('u-rows');
+      rows.innerHTML = '';
+      users.forEach(u => {
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-white/60 transition-colors';
+        const gnames = userGroups(u.id).map(n =>
+          `<span class="px-2 py-0.5 border border-slate-200 bg-slate-50 text-slate-600 font-label-caps text-[10px] rounded-full mr-1">${esc(n)}</span>`).join('') || '<span class="text-slate-300">—</span>';
+        const actionBtn = u.is_active
+          ? `<button data-act="reset" data-uid="${u.id}" class="text-cyan-600 bg-cyan-50 border border-cyan-100 px-3 py-1.5 rounded-lg font-label-caps text-[10px] hover:bg-cyan-100 transition flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">lock_reset</span>${t('admin.send_reset')}</button>`
+          : `<button data-act="invite" data-uid="${u.id}" class="text-amber-600 bg-amber-50 border border-amber-100 px-3 py-1.5 rounded-lg font-label-caps text-[10px] hover:bg-amber-100 transition flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">outgoing_mail</span>${t('admin.resend_invite')}</button>`;
+        tr.innerHTML = `
+          <td class="px-5 py-3 font-code-sm text-code-sm text-slate-400">${u.id}</td>
+          <td class="px-5 py-3 font-code-sm text-code-sm font-semibold">${esc(u.username)}</td>
+          <td class="px-5 py-3 font-code-sm text-[12px] text-slate-500">${u.email ? esc(u.email) : '<span class="text-slate-300">—</span>'}</td>
+          <td class="px-5 py-3 whitespace-nowrap">${statusBadge(u)}</td>
+          <td class="px-5 py-3">
+            <select data-uid="${u.id}" class="role-sel border rounded-lg px-2 py-1 font-label-caps text-[10px] ${ROLE_BADGE[u.role] || ''}">
+              ${['admin', 'manager', 'editor', 'viewer'].map(r => `<option value="${r}" ${r === u.role ? 'selected' : ''}>${r}</option>`).join('')}
+            </select>
+          </td>
+          <td class="px-5 py-3">${gnames}</td>
+          <td class="px-5 py-3">
+            <div class="flex items-center justify-end gap-2">
+              ${actionBtn}
+              <button data-act="del" data-uid="${u.id}" class="text-rose-600 bg-rose-50 border border-rose-100 px-3 py-1.5 rounded-lg font-label-caps text-[10px] hover:bg-rose-100 transition flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">delete</span>${t('common.delete')}</button>
+            </div>
+          </td>`;
+        rows.appendChild(tr);
+      });
+    }
+
+    // Link one-time da consegnare manualmente (SMTP assente o invio fallito).
+    function showManualLink(d) {
+      const link = d.activation_link || d.reset_link;
+      if (d.sent) { showToast(t('admin.toast_email_sent', { email: d.email })); return; }
+      if (link) window.prompt((d.warning || t('admin.deliver_link')), link);
+      else showToast(d.warning || t('admin.done'));
+    }
+
+    function renderGroups() {
+      const list = $('g-list');
+      list.innerHTML = '';
+      if (!groups.length) {
+        list.innerHTML = `<p class="font-code-sm text-code-sm text-slate-400">${t('admin.no_groups')}</p>`;
+        return;
+      }
+      groups.forEach(g => {
+        const div = document.createElement('div');
+        div.className = 'border border-slate-200/70 rounded-xl p-4 bg-white/50';
+        const checks = users.map(u => `
+          <label class="inline-flex items-center gap-1.5 mr-4 mb-1 font-code-sm text-[12px] text-slate-600 cursor-pointer select-none">
+            <input type="checkbox" data-gid="${g.id}" data-uid="${u.id}" class="member-chk h-3.5 w-3.5 rounded border-slate-300 text-cyan-600 focus:ring-cyan-300"
+              ${(g.member_ids || []).includes(u.id) ? 'checked' : ''} />
+            ${esc(u.username)}
+          </label>`).join('');
+        div.innerHTML = `
+          <div class="flex items-center justify-between mb-2">
+            <span class="font-label-caps text-label-caps text-slate-700 flex items-center gap-2">
+              <span class="material-symbols-outlined text-[16px] text-cyan-500">group</span>${esc(g.name)}
+              <span class="text-slate-400">(${(g.member_ids || []).length})</span>
+            </span>
+            <button data-act="gdel" data-gid="${g.id}" class="text-rose-600 bg-rose-50 border border-rose-100 px-3 py-1 rounded-lg font-label-caps text-[10px] hover:bg-rose-100 transition">${t('common.delete')}</button>
+          </div>
+          <div>${checks || `<span class="font-code-sm text-[12px] text-slate-400">${t('admin.no_users')}</span>`}</div>`;
+        list.appendChild(div);
+      });
+    }
+
+    async function load() {
+      try {
+        const [du, dg] = await Promise.all([apiJson('/api/users'), apiJson('/api/groups')]);
+        users = du.users || [];
+        groups = dg.groups || [];
+        renderUsers();
+        renderGroups();
+      } catch (e) {
+        showToast(e.message, false);
+      }
+    }
+
+    $('u-create').addEventListener('click', async () => {
+      const username = $('u-name').value.trim();
+      const email = $('u-email').value.trim();
+      if (!username || !email) { showToast(t('admin.err_required'), false); return; }
+      try {
+        const d = await apiJson('/api/users', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, email, role: $('u-role').value }),
+        });
+        $('u-name').value = ''; $('u-email').value = '';
+        showManualLink(d);
+        load();
+      } catch (e) { showToast(e.message, false); }
+    });
+
+    $('g-create').addEventListener('click', async () => {
+      const name = $('g-name').value.trim();
+      if (!name) return;
+      try {
+        await apiJson('/api/groups', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name }),
+        });
+        $('g-name').value = '';
+        showToast(t('admin.toast_group_created'));
+        load();
+      } catch (e) { showToast(e.message, false); }
+    });
+
+    $('u-rows').addEventListener('click', async (e) => {
+      const btn = e.target.closest('button[data-act]');
+      if (!btn) return;
+      const uid = parseInt(btn.dataset.uid, 10);
+      if (btn.dataset.act === 'del') {
+        const u = users.find(x => x.id === uid);
+        if (!confirm(t('admin.confirm_delete_user', { u: (u ? u.username : uid) }))) return;
+        try { await apiJson(`/api/users/${uid}`, { method: 'DELETE' }); showToast(t('admin.toast_user_deleted')); load(); }
+        catch (err) { showToast(err.message, false); }
+      } else if (btn.dataset.act === 'invite') {
+        try { showManualLink(await apiJson(`/api/users/${uid}/invite`, { method: 'POST' })); }
+        catch (err) { showToast(err.message, false); }
+      } else if (btn.dataset.act === 'reset') {
+        const u = users.find(x => x.id === uid);
+        if (!confirm(t('admin.confirm_reset', { u: (u ? u.username : uid) }))) return;
+        try { showManualLink(await apiJson(`/api/users/${uid}/reset`, { method: 'POST' })); }
+        catch (err) { showToast(err.message, false); }
+      }
+    });
+
+    $('u-rows').addEventListener('change', async (e) => {
+      const sel = e.target.closest('select.role-sel');
+      if (!sel) return;
+      const uid = parseInt(sel.dataset.uid, 10);
+      try {
+        await apiJson(`/api/users/${uid}`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ role: sel.value }),
+        });
+        showToast(t('admin.toast_role_updated'));
+        load();
+      } catch (err) { showToast(err.message, false); load(); }
+    });
+
+    $('g-list').addEventListener('click', async (e) => {
+      const btn = e.target.closest('button[data-act="gdel"]');
+      if (!btn) return;
+      const gid = parseInt(btn.dataset.gid, 10);
+      const g = groups.find(x => x.id === gid);
+      if (!confirm(t('admin.confirm_delete_group', { g: (g ? g.name : gid) }))) return;
+      try { await apiJson(`/api/groups/${gid}`, { method: 'DELETE' }); showToast(t('admin.toast_group_deleted')); load(); }
+      catch (err) { showToast(err.message, false); }
+    });
+
+    $('g-list').addEventListener('change', async (e) => {
+      const chk = e.target.closest('input.member-chk');
+      if (!chk) return;
+      const gid = parseInt(chk.dataset.gid, 10);
+      const g = groups.find(x => x.id === gid);
+      if (!g) return;
+      const uid = parseInt(chk.dataset.uid, 10);
+      const ids = new Set(g.member_ids || []);
+      chk.checked ? ids.add(uid) : ids.delete(uid);
+      try {
+        await apiJson(`/api/groups/${gid}/members`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_ids: [...ids] }),
+        });
+        g.member_ids = [...ids];
+        showToast(t('admin.toast_membership'));
+        renderUsers();
+      } catch (err) { showToast(err.message, false); load(); }
+    });
+
+    window.addEventListener('langchange', () => { renderUsers(); renderGroups(); });
+
+    load();
+  </script>
+</body>
+
+</html>

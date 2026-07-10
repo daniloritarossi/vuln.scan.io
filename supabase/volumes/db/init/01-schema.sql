@@ -204,5 +204,75 @@ CREATE INDEX IF NOT EXISTS idx_findings_severity ON public.findings(severity);
 GRANT ALL ON ALL TABLES    IN SCHEMA public TO anon, authenticated, service_role;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
 
--- 7) Ricarica la cache schema di PostgREST.
+-- 7) RBAC / CONO DI VISIBILITA': utenti, gruppi e assegnazioni asset.
+--    Ruoli applicativi: admin | manager | editor | viewer.
+--    Lo scope dell'editor e' definito dalle assegnazioni asset -> utente/gruppo.
+CREATE TABLE IF NOT EXISTS public.users (
+  id            bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  created_at    timestamptz NOT NULL DEFAULT now(),
+  username      text NOT NULL UNIQUE,
+  password_hash text NOT NULL,             -- PBKDF2-HMAC-SHA256 (vedi auth.py)
+  role          text NOT NULL DEFAULT 'viewer'
+                CHECK (role IN ('admin','manager','editor','viewer'))
+);
+
+CREATE TABLE IF NOT EXISTS public.groups (
+  id         bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  name       text NOT NULL UNIQUE
+);
+
+-- Membership N:N utente <-> gruppo (un utente puo' stare in piu' gruppi).
+CREATE TABLE IF NOT EXISTS public.user_groups (
+  user_id  bigint NOT NULL REFERENCES public.users(id)  ON DELETE CASCADE,
+  group_id bigint NOT NULL REFERENCES public.groups(id) ON DELETE CASCADE,
+  PRIMARY KEY (user_id, group_id)
+);
+
+-- Assegnazione asset -> utente O gruppo (mai entrambi sulla stessa riga).
+CREATE TABLE IF NOT EXISTS public.asset_assignments (
+  id       bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  asset_id bigint NOT NULL REFERENCES public.assets(id)  ON DELETE CASCADE,
+  user_id  bigint REFERENCES public.users(id)  ON DELETE CASCADE,
+  group_id bigint REFERENCES public.groups(id) ON DELETE CASCADE,
+  CHECK (num_nonnulls(user_id, group_id) = 1),
+  UNIQUE (asset_id, user_id, group_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_asset_assignments_asset ON public.asset_assignments(asset_id);
+CREATE INDEX IF NOT EXISTS idx_asset_assignments_user  ON public.asset_assignments(user_id);
+CREATE INDEX IF NOT EXISTS idx_asset_assignments_group ON public.asset_assignments(group_id);
+CREATE INDEX IF NOT EXISTS idx_user_groups_user        ON public.user_groups(user_id);
+
+-- Onboarding via email (invito con link one-time, mai password via mail):
+--   email/email_verified_at    -> validazione implicita all'attivazione
+--   is_active                  -> false finche' l'utente non imposta la password
+--   must_change_password       -> cambio forzato al prossimo accesso
+--   password_changed_at        -> rotation policy + invalidazione sessioni emesse prima
+ALTER TABLE public.users
+  ADD COLUMN IF NOT EXISTS email                text UNIQUE,
+  ADD COLUMN IF NOT EXISTS email_verified_at    timestamptz,
+  ADD COLUMN IF NOT EXISTS must_change_password boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS password_changed_at  timestamptz DEFAULT now(),
+  ADD COLUMN IF NOT EXISTS is_active            boolean NOT NULL DEFAULT true;
+ALTER TABLE public.users ALTER COLUMN password_hash DROP NOT NULL;
+
+-- Token one-time (attivazione account / reset password). In tabella va SOLO
+-- l'hash SHA-256 del token: se il DB leaka, i token non sono spendibili.
+CREATE TABLE IF NOT EXISTS public.auth_tokens (
+  id         bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  user_id    bigint NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  token_hash text NOT NULL UNIQUE,
+  purpose    text NOT NULL CHECK (purpose IN ('activation','reset')),
+  expires_at timestamptz NOT NULL,
+  used_at    timestamptz
+);
+
+CREATE INDEX IF NOT EXISTS idx_auth_tokens_user ON public.auth_tokens(user_id);
+
+GRANT ALL ON ALL TABLES    IN SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
+
+-- 8) Ricarica la cache schema di PostgREST.
 NOTIFY pgrst, 'reload schema';

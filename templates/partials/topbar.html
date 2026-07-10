@@ -42,6 +42,16 @@
     {% endif %}
   </div>
   <div class="flex items-center gap-3">
+    <!-- Utente corrente + logout (popolato da /api/me) -->
+    <div id="userChip" class="hidden items-center gap-2 bg-slate-100 rounded-full pl-3 pr-1 py-1">
+      <span class="material-symbols-outlined text-[15px] text-cyan-600">person</span>
+      <span id="userChipName" class="font-code-sm text-[12px] text-slate-700"></span>
+      <span id="userChipRole" class="font-label-caps text-[9px] text-white bg-slate-500 px-2 py-0.5 rounded-full"></span>
+      <a href="/logout" title="Logout"
+        class="flex items-center justify-center w-6 h-6 rounded-full text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors">
+        <span class="material-symbols-outlined text-[15px]">logout</span>
+      </a>
+    </div>
     <div class="flex items-center gap-1 bg-slate-100 rounded-lg p-0.5">
       <button data-lang-btn="en" class="px-2 py-1 rounded-md font-label-caps text-[10px] transition-colors">EN</button>
       <button data-lang-btn="it" class="px-2 py-1 rounded-md font-label-caps text-[10px] transition-colors">IT</button>
@@ -70,4 +80,61 @@
       window.dispatchEvent(new Event('themechange'));
     });
   })();
+</script>
+<script>
+  // Utente corrente: chip in topbar + visibilita' voci di menu per ruolo.
+  // window.vfaUser (Promise) e' riusabile dalle pagine per adattare la UI.
+  window.vfaUser = fetch('/api/me').then(r => r.ok ? r.json() : null).catch(() => null);
+  window.vfaUser.then(function (u) {
+    if (!u) return;
+    var chip = document.getElementById('userChip');
+    if (chip) {
+      document.getElementById('userChipName').textContent = u.username;
+      var roleEl = document.getElementById('userChipRole');
+      roleEl.textContent = u.role.toUpperCase();
+      var colors = { admin: 'bg-rose-500', manager: 'bg-cyan-600', editor: 'bg-emerald-600', viewer: 'bg-slate-500' };
+      roleEl.className = 'font-label-caps text-[9px] text-white px-2 py-0.5 rounded-full ' + (colors[u.role] || 'bg-slate-500');
+      chip.classList.remove('hidden');
+      chip.classList.add('flex');
+    }
+    // Nasconde le voci nav non permesse dal ruolo (la difesa vera e' server-side).
+    var hide = [];
+    if (u.role !== 'admin') hide.push('/admin');
+    if (u.role !== 'admin' && u.role !== 'manager') hide.push('/settings');
+    if (u.role === 'viewer') hide.push('/audit');
+    hide.forEach(function (href) {
+      document.querySelectorAll('nav a[href="' + href + '"]').forEach(function (a) {
+        var li = a.closest('li'); (li || a).style.display = 'none';
+      });
+    });
+
+    // Check aggiornamenti: banner discreto in basso a sinistra se su GitHub
+    // esiste un tag piu' recente della versione locale. Dismissibile per
+    // versione (localStorage), cache lato server (6h).
+    fetch('/api/version/check').then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (v) {
+        if (!v || !v.update_available) return;
+        try {
+          if (localStorage.getItem('dismissedVersion') === v.latest) return;
+        } catch (e) { }
+        var el = document.createElement('div');
+        el.id = 'updateBanner';
+        el.className = 'fixed bottom-4 left-4 z-50 flex items-center gap-2 bg-slate-900 text-slate-100 ' +
+          'rounded-xl shadow-2xl border border-slate-700/50 pl-3 pr-1.5 py-2 font-code-sm text-[12px]';
+        el.innerHTML =
+          '<span class="material-symbols-outlined text-[16px] text-cyan-400">system_update_alt</span>' +
+          '<span>' + (window.t ? t('ver.available', { v: v.latest }) : 'New version ' + v.latest + ' available') + '</span>' +
+          '<a href="' + v.repo_url + '/releases" target="_blank" rel="noopener" ' +
+          'class="text-cyan-400 hover:text-cyan-300 underline decoration-dotted ml-1">' +
+          (window.t ? t('ver.hint') : './start.sh update') + '</a>' +
+          '<button id="updateBannerClose" aria-label="Dismiss" ' +
+          'class="ml-1 w-6 h-6 flex items-center justify-center rounded-full text-slate-400 hover:text-white hover:bg-slate-700/60 transition-colors">' +
+          '<span class="material-symbols-outlined text-[14px]">close</span></button>';
+        document.body.appendChild(el);
+        document.getElementById('updateBannerClose').addEventListener('click', function () {
+          try { localStorage.setItem('dismissedVersion', v.latest); } catch (e) { }
+          el.remove();
+        });
+      }).catch(function () { });
+  });
 </script>

@@ -436,6 +436,108 @@ BATEOF
   fi
 }
 
+# ── Aggiornamento applicazione (check tag GitHub + download sorgenti) ────────
+
+GITHUB_REPO="${VFA_GITHUB_REPO:-daniloritarossi/vuln.scan.io}"
+
+_local_version() {
+  # Tag base locale: 'v1.0.11-alfa-3-gabc' -> 'v1.0.11-alfa'. 'dev' se niente git.
+  git describe --tags --always 2>/dev/null | sed -E 's/-[0-9]+-g[0-9a-f]+$//' || printf 'dev'
+}
+
+_latest_version() {
+  # Tag piu' recente su GitHub (ordinato per versione). Vuoto se irraggiungibile.
+  curl -fsS --max-time 8 \
+    -H 'Accept: application/vnd.github+json' \
+    "https://api.github.com/repos/${GITHUB_REPO}/tags?per_page=30" 2>/dev/null \
+  | python3 -c "
+import json, re, sys
+try:
+    tags = [t['name'] for t in json.load(sys.stdin)]
+except Exception:
+    sys.exit(0)
+def ver(t):
+    m = re.match(r'v?(\d+)\.(\d+)(?:\.(\d+))?', t)
+    return (int(m.group(1)), int(m.group(2)), int(m.group(3) or 0)) if m else None
+parsed = [(ver(t), t) for t in tags if ver(t)]
+if parsed:
+    print(max(parsed)[1])
+"
+}
+
+_download_update() {
+  # Scarica i sorgenti del tag indicato e li applica alla directory corrente.
+  # Preferisce git (storia + rollback); fallback tarball GitHub se .git assente.
+  # I file runtime (config.json, .venv, .encdec, segreti, dati Supabase) NON
+  # vengono toccati in entrambi i percorsi.
+  local _tag="$1"
+  if [ -d .git ]; then
+    printf '  ==> git fetch --tags && checkout %s\n' "$_tag" >&2
+    if ! git diff --quiet 2>/dev/null; then
+      printf '  ATTENZIONE: modifiche locali non committate. Aggiornamento annullato.\n' >&2
+      printf '  Committa o scarta le modifiche, poi riprova.\n' >&2
+      return 1
+    fi
+    git fetch --tags origin >&2 || { printf '  ERRORE: git fetch fallito.\n' >&2; return 1; }
+    git checkout "$_tag" >&2 || { printf '  ERRORE: checkout %s fallito.\n' "$_tag" >&2; return 1; }
+  else
+    printf '  ==> download tarball %s da GitHub...\n' "$_tag" >&2
+    local _tmp
+    _tmp=$(mktemp -d)
+    if ! curl -fsSL --max-time 120 \
+        "https://github.com/${GITHUB_REPO}/archive/refs/tags/${_tag}.tar.gz" \
+        -o "$_tmp/src.tar.gz"; then
+      printf '  ERRORE: download fallito.\n' >&2; rm -rf "$_tmp"; return 1
+    fi
+    tar -xzf "$_tmp/src.tar.gz" -C "$_tmp" || { rm -rf "$_tmp"; return 1; }
+    local _srcdir
+    _srcdir=$(find "$_tmp" -maxdepth 1 -mindepth 1 -type d | head -1)
+    printf '  ==> applico i sorgenti (file runtime preservati)...\n' >&2
+    rsync -a \
+      --exclude 'config.json' \
+      --exclude '.venv/' \
+      --exclude '.encdec/' \
+      --exclude '.vfa_auth_secret' \
+      --exclude 'assets.txt*' \
+      --exclude 'supabase/volumes/db/data/' \
+      --exclude '*.log' --exclude '*.pid' \
+      "$_srcdir/" ./ || { rm -rf "$_tmp"; return 1; }
+    rm -rf "$_tmp"
+  fi
+  return 0
+}
+
+_check_app_update() {
+  _sep "Controllo Aggiornamenti" >&2
+  local _cur _new
+  _cur=$(_local_version)
+  printf '  Versione locale : %s\n' "$_cur" >&2
+  printf '  Controllo GitHub (%s)...\n' "$GITHUB_REPO" >&2
+  _new=$(_latest_version)
+  if [ -z "$_new" ]; then
+    printf '  GitHub non raggiungibile o nessun tag trovato.\n' >&2
+    return
+  fi
+  printf '  Ultima versione : %s\n' "$_new" >&2
+  if [ "$_new" = "$_cur" ]; then
+    printf '\n  ✓ Sei gia'"'"' alla versione piu'"'"' recente.\n' >&2
+    return
+  fi
+  printf '\n  Nuova versione disponibile: %s -> %s\n' "$_cur" "$_new" >&2
+  local _ok
+  _ok=$(_ask "Scaricare e installare ora? (s/n)" "s")
+  case "$_ok" in
+    s|S|y|Y)
+      if _download_update "$_new"; then
+        printf '\n  ✓ Aggiornato a %s.\n' "$_new" >&2
+        printf '  Rilancia con ./start.sh per applicare (dipendenze e schema DB\n' >&2
+        printf '  vengono riallineati automaticamente all'"'"'avvio).\n' >&2
+      fi
+      ;;
+    *) printf '  Aggiornamento annullato.\n' >&2 ;;
+  esac
+}
+
 # ── Update menu ───────────────────────────────────────────────────────────────
 
 _update_menu() {
@@ -452,14 +554,16 @@ _update_menu() {
       "AI provider (locale/remoto)" \
       "Search engine (DuckDuckGo/Serper)" \
       "Macchina di test Docker (Linux/Windows)" \
+      "Controlla aggiornamenti applicazione (GitHub)" \
       "Salva ed esci (solo configurazione, non lancia)" \
       "Salva e lancia l'app")
     case "$_c" in
       1) _wizard_ai           ;;
       2) _wizard_search        ;;
       3) _wizard_test_machine  ;;
-      4) LAUNCH_APP=0; break  ;;
-      5) break                ;;
+      4) _check_app_update     ;;
+      5) LAUNCH_APP=0; break  ;;
+      6) break                ;;
     esac
   done
 }

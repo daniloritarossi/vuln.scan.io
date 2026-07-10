@@ -485,6 +485,312 @@ def close_stale_posture_findings(asset_ip: str, seen_fps: list) -> int:
         return 0
 
 
+# ---------------------------------------------------------------------------
+# RBAC / CONO DI VISIBILITA' (users, groups, user_groups, asset_assignments)
+# ---------------------------------------------------------------------------
+
+def fetch_user_by_username(username: str):
+    """Riga utente per username. None se assente o DB non raggiungibile."""
+    client = _get_client()
+    if client is None:
+        return None
+    try:
+        resp = client.table("users").select("*").eq("username", username).execute()
+        return resp.data[0] if resp.data else None
+    except Exception as exc:
+        logger.warning("fetch_user_by_username fallita (%s): %s", username, exc)
+        return None
+
+
+def fetch_user(user_id: int):
+    """Riga utente per id. None se assente o DB non raggiungibile."""
+    client = _get_client()
+    if client is None:
+        return None
+    try:
+        resp = client.table("users").select("*").eq("id", user_id).execute()
+        return resp.data[0] if resp.data else None
+    except Exception as exc:
+        logger.warning("fetch_user fallita (id=%s): %s", user_id, exc)
+        return None
+
+
+def fetch_users():
+    """Tutti gli utenti (senza password_hash). None se DB non raggiungibile."""
+    client = _get_client()
+    if client is None:
+        return None
+    try:
+        resp = (client.table("users")
+                .select("id, created_at, username, role, email, "
+                        "email_verified_at, is_active, must_change_password")
+                .order("id").execute())
+        return resp.data or []
+    except Exception as exc:
+        logger.warning("fetch_users fallita: %s", exc)
+        return None
+
+
+def fetch_user_by_email(email: str):
+    """Riga utente per email. None se assente o DB non raggiungibile."""
+    client = _get_client()
+    if client is None:
+        return None
+    try:
+        resp = client.table("users").select("*").eq("email", email).execute()
+        return resp.data[0] if resp.data else None
+    except Exception as exc:
+        logger.warning("fetch_user_by_email fallita (%s): %s", email, exc)
+        return None
+
+
+def insert_user(row: dict) -> Optional[int]:
+    """Crea un utente. Ritorna l'id, None se fallisce (es. username duplicato)."""
+    client = _get_client()
+    if client is None:
+        return None
+    try:
+        resp = client.table("users").insert(row).execute()
+        return resp.data[0]["id"] if resp.data else None
+    except Exception as exc:
+        logger.warning("insert_user fallita (%s): %s", row.get("username"), exc)
+        return None
+
+
+def update_user(user_id: int, row: dict) -> bool:
+    """Aggiorna ruolo e/o password_hash di un utente."""
+    client = _get_client()
+    if client is None:
+        return False
+    try:
+        resp = client.table("users").update(row).eq("id", user_id).execute()
+        return bool(resp.data)
+    except Exception as exc:
+        logger.warning("update_user fallita (id=%s): %s", user_id, exc)
+        return False
+
+
+def delete_user(user_id: int) -> bool:
+    """Elimina un utente (le assegnazioni cascano)."""
+    client = _get_client()
+    if client is None:
+        return False
+    try:
+        resp = client.table("users").delete().eq("id", user_id).execute()
+        return bool(resp.data)
+    except Exception as exc:
+        logger.warning("delete_user fallita (id=%s): %s", user_id, exc)
+        return False
+
+
+# --- Token one-time (attivazione account / reset password) -----------------
+
+def insert_auth_token(user_id: int, token_hash: str, purpose: str,
+                      expires_at: str) -> bool:
+    """Salva l'hash di un token one-time. True se riuscito."""
+    client = _get_client()
+    if client is None:
+        return False
+    try:
+        client.table("auth_tokens").insert({
+            "user_id": user_id, "token_hash": token_hash,
+            "purpose": purpose, "expires_at": expires_at,
+        }).execute()
+        return True
+    except Exception as exc:
+        logger.warning("insert_auth_token fallita (user=%s): %s", user_id, exc)
+        return False
+
+
+def fetch_auth_token(token_hash: str):
+    """Riga token per hash. None se assente o DB non raggiungibile."""
+    client = _get_client()
+    if client is None:
+        return None
+    try:
+        resp = (client.table("auth_tokens").select("*")
+                .eq("token_hash", token_hash).execute())
+        return resp.data[0] if resp.data else None
+    except Exception as exc:
+        logger.warning("fetch_auth_token fallita: %s", exc)
+        return None
+
+
+def mark_auth_token_used(token_id: int) -> bool:
+    """Brucia il token (one-time). True se la riga esiste."""
+    client = _get_client()
+    if client is None:
+        return False
+    try:
+        resp = (client.table("auth_tokens").update({"used_at": "now()"})
+                .eq("id", token_id).execute())
+        return bool(resp.data)
+    except Exception as exc:
+        logger.warning("mark_auth_token_used fallita (id=%s): %s", token_id, exc)
+        return False
+
+
+def invalidate_auth_tokens(user_id: int, purpose: str) -> None:
+    """Brucia i token pendenti dell'utente (reinvio invito/reset)."""
+    client = _get_client()
+    if client is None:
+        return
+    try:
+        (client.table("auth_tokens").update({"used_at": "now()"})
+         .eq("user_id", user_id).eq("purpose", purpose)
+         .is_("used_at", "null").execute())
+    except Exception as exc:
+        logger.warning("invalidate_auth_tokens fallita (user=%s): %s", user_id, exc)
+
+
+def fetch_groups():
+    """Tutti i gruppi con i membri annidati. None se DB non raggiungibile."""
+    client = _get_client()
+    if client is None:
+        return None
+    try:
+        resp = (client.table("groups")
+                .select("id, name, user_groups(user_id)").order("id").execute())
+        return resp.data or []
+    except Exception as exc:
+        logger.warning("fetch_groups fallita: %s", exc)
+        return None
+
+
+def insert_group(name: str) -> Optional[int]:
+    """Crea un gruppo. Ritorna l'id, None se fallisce (es. nome duplicato)."""
+    client = _get_client()
+    if client is None:
+        return None
+    try:
+        resp = client.table("groups").insert({"name": name}).execute()
+        return resp.data[0]["id"] if resp.data else None
+    except Exception as exc:
+        logger.warning("insert_group fallita (%s): %s", name, exc)
+        return None
+
+
+def delete_group(group_id: int) -> bool:
+    """Elimina un gruppo (membership e assegnazioni cascano)."""
+    client = _get_client()
+    if client is None:
+        return False
+    try:
+        resp = client.table("groups").delete().eq("id", group_id).execute()
+        return bool(resp.data)
+    except Exception as exc:
+        logger.warning("delete_group fallita (id=%s): %s", group_id, exc)
+        return False
+
+
+def set_group_members(group_id: int, user_ids: list) -> bool:
+    """Sostituisce la membership del gruppo con la lista indicata."""
+    client = _get_client()
+    if client is None:
+        return False
+    try:
+        client.table("user_groups").delete().eq("group_id", group_id).execute()
+        if user_ids:
+            client.table("user_groups").insert(
+                [{"group_id": group_id, "user_id": int(u)} for u in user_ids]
+            ).execute()
+        return True
+    except Exception as exc:
+        logger.warning("set_group_members fallita (id=%s): %s", group_id, exc)
+        return False
+
+
+def fetch_user_group_ids(user_id: int) -> Optional[list]:
+    """Lista di group_id a cui l'utente appartiene. None se DB non raggiungibile."""
+    client = _get_client()
+    if client is None:
+        return None
+    try:
+        resp = (client.table("user_groups").select("group_id")
+                .eq("user_id", user_id).execute())
+        return [r["group_id"] for r in (resp.data or [])]
+    except Exception as exc:
+        logger.warning("fetch_user_group_ids fallita (id=%s): %s", user_id, exc)
+        return None
+
+
+def fetch_all_assignments():
+    """
+    Tutte le assegnazioni asset->utente/gruppo, arricchite con username/nome
+    gruppo per la UI. None se DB non raggiungibile.
+    """
+    client = _get_client()
+    if client is None:
+        return None
+    try:
+        resp = (client.table("asset_assignments")
+                .select("id, asset_id, user_id, group_id, users(username), groups(name)")
+                .execute())
+        return resp.data or []
+    except Exception as exc:
+        logger.warning("fetch_all_assignments fallita: %s", exc)
+        return None
+
+
+def set_asset_assignments(asset_id: int, user_ids: list, group_ids: list) -> bool:
+    """Sostituisce le assegnazioni dell'asset con le liste indicate."""
+    client = _get_client()
+    if client is None:
+        return False
+    try:
+        client.table("asset_assignments").delete().eq("asset_id", asset_id).execute()
+        rows = ([{"asset_id": asset_id, "user_id": int(u)} for u in (user_ids or [])]
+                + [{"asset_id": asset_id, "group_id": int(g)} for g in (group_ids or [])])
+        if rows:
+            client.table("asset_assignments").insert(rows).execute()
+        return True
+    except Exception as exc:
+        logger.warning("set_asset_assignments fallita (asset=%s): %s", asset_id, exc)
+        return False
+
+
+def add_asset_assignment(asset_id: int, user_id: Optional[int] = None,
+                         group_id: Optional[int] = None) -> bool:
+    """Aggiunge una singola assegnazione (usata per l'auto-assign dell'editor)."""
+    client = _get_client()
+    if client is None:
+        return False
+    try:
+        row = {"asset_id": asset_id}
+        if user_id is not None:
+            row["user_id"] = int(user_id)
+        if group_id is not None:
+            row["group_id"] = int(group_id)
+        client.table("asset_assignments").insert(row).execute()
+        return True
+    except Exception as exc:
+        logger.warning("add_asset_assignment fallita (asset=%s): %s", asset_id, exc)
+        return False
+
+
+def fetch_assigned_asset_ids(user_id: int, group_ids: list) -> Optional[set]:
+    """
+    Insieme degli asset id visibili all'utente 'editor': assegnati a lui
+    direttamente o a uno dei suoi gruppi. None se DB non raggiungibile.
+    """
+    client = _get_client()
+    if client is None:
+        return None
+    try:
+        ids = set()
+        resp = (client.table("asset_assignments").select("asset_id")
+                .eq("user_id", user_id).execute())
+        ids.update(r["asset_id"] for r in (resp.data or []))
+        if group_ids:
+            resp = (client.table("asset_assignments").select("asset_id")
+                    .in_("group_id", list(group_ids)).execute())
+            ids.update(r["asset_id"] for r in (resp.data or []))
+        return ids
+    except Exception as exc:
+        logger.warning("fetch_assigned_asset_ids fallita (user=%s): %s", user_id, exc)
+        return None
+
+
 def fetch_posture_runs(limit: int = 30):
     """Elenco sintetico delle run (per il selettore storico)."""
     client = _get_client()

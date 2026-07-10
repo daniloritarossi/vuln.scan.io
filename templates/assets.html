@@ -101,7 +101,7 @@
       min-height: max(884px, 100dvh);
     }
   </style>
-  <script src="/static/i18n.js?v=12"></script>
+  <script src="/static/i18n.js?v=14"></script>
   <script src="/static/vendor/xlsx.full.min.js"></script>
   <script src="/static/tableutils.js"></script>
 </head>
@@ -299,6 +299,8 @@
                       <span id="sicon-enabled"></span>
                     </span>
                   </th>
+                  <th class="font-label-caps text-label-caps text-slate-500 px-5 py-4 whitespace-nowrap"
+                    data-i18n="assets.th_assigned">ASSIGNED TO</th>
                   <th class="font-label-caps text-label-caps text-slate-500 px-5 py-4 text-right"
                     data-i18n="assets.th_actions">ACTIONS</th>
                 </tr>
@@ -326,6 +328,11 @@
     let editingIndex = null;
     let assetSort = { field: 'index', dir: 'asc' };
     let assetPage = 0, assetPageSize = 50;
+    // Ruolo corrente (da /api/me via topbar): guida SOLO la UI, l'enforcement
+    // vero e' server-side su ogni endpoint.
+    let canWrite = false;    // admin | manager | editor
+    let canAssign = false;   // admin | manager (riassegnazione coni)
+    let allUsers = [], allGroups = [];
 
     function updateSortIcons() {
       ['index', 'ip', 'username', 'auth_required', 'os_type', 'os_major_version', 'enabled'].forEach(f => {
@@ -413,6 +420,7 @@
             <span>${a.enabled ? t('assets.scan_on') : t('assets.scan_off')}</span>
           </label>
         </td>
+        <td class="px-5 py-3 text-slate-300 font-code-sm text-[11px]">—</td>
         <td class="px-5 py-3">
           <div class="flex items-center justify-end gap-2">
             <button data-act="save" data-i="${a.index}" class="text-emerald-600 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-lg font-label-caps text-[10px] hover:bg-emerald-100 transition flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">check</span>${t('common.save')}</button>
@@ -437,12 +445,30 @@
       <td class="px-5 py-3 font-code-sm text-[11px] text-slate-500">${a.os_major_version ? esc(a.os_major_version) : '<span class="text-slate-300">—</span>'}</td>
       <td class="px-5 py-3" id="act-${a.index}">${statusCell(a)}</td>
       <td class="px-5 py-3">${scanToggle(a)}</td>
+      <td class="px-5 py-3">${assignmentsCell(a)}</td>
       <td class="px-5 py-3">
         <div class="flex items-center justify-end gap-2">
-          <button data-act="edit" data-i="${a.index}" class="text-cyan-600 bg-cyan-50 border border-cyan-100 px-3 py-1.5 rounded-lg font-label-caps text-[10px] hover:bg-cyan-100 transition flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">edit</span>${t('common.edit')}</button>
-          <button data-act="delete" data-i="${a.index}" class="text-rose-600 bg-rose-50 border border-rose-100 px-3 py-1.5 rounded-lg font-label-caps text-[10px] hover:bg-rose-100 transition flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">delete</span>${t('common.delete')}</button>
+          ${canWrite ? `<button data-act="edit" data-i="${a.index}" class="text-cyan-600 bg-cyan-50 border border-cyan-100 px-3 py-1.5 rounded-lg font-label-caps text-[10px] hover:bg-cyan-100 transition flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">edit</span>${t('common.edit')}</button>
+          <button data-act="delete" data-i="${a.index}" class="text-rose-600 bg-rose-50 border border-rose-100 px-3 py-1.5 rounded-lg font-label-caps text-[10px] hover:bg-rose-100 transition flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">delete</span>${t('common.delete')}</button>` : `<span class="text-slate-300 font-code-sm text-[11px]">${t('assets.readonly')}</span>`}
         </div>
       </td>`;
+    }
+
+    // --- ASSIGNED TO column: cono di visibilita' -------------------------
+    // Chips utenti/gruppi assegnati; admin e manager possono modificarle.
+    function assignmentsCell(a) {
+      const items = a.assignments || [];
+      const chips = items.map(x =>
+        `<span class="inline-flex items-center gap-1 px-2 py-0.5 border ${x.type === 'group'
+          ? 'border-violet-200 bg-violet-50 text-violet-700'
+          : 'border-cyan-200 bg-cyan-50 text-cyan-700'} font-label-caps text-[10px] rounded-full mr-1 mb-0.5">
+          <span class="material-symbols-outlined text-[11px]">${x.type === 'group' ? 'group' : 'person'}</span>${esc(x.name)}</span>`
+      ).join('') || `<span class="text-slate-300 font-code-sm text-[11px]">${t('assets.unassigned')}</span>`;
+      const editBtn = canAssign
+        ? `<button data-act="assign" data-i="${a.index}" title="${t('assets.assign_edit')}"
+             class="align-middle text-slate-400 hover:text-cyan-600 transition-colors"><span class="material-symbols-outlined text-[15px]">edit_note</span></button>`
+        : '';
+      return `<div class="flex items-center flex-wrap max-w-[220px]">${chips}${editBtn}</div>`;
     }
 
     // --- ACTIVE column: live reachability ---------------------------------
@@ -564,7 +590,67 @@
       else if (act === 'save') { saveEdit(i, tr); }
       else if (act === 'delete') { deleteAsset(i); }
       else if (act === 'toggle') { toggleAsset(i); }
+      else if (act === 'assign') { openAssignModal(i); }
     });
+
+    // --- Modal assegnazioni (cono di visibilita') -------------------------
+    async function openAssignModal(index) {
+      const a = assets.find(x => x.index === index);
+      if (!a) return;
+      if (!allUsers.length && !allGroups.length) {
+        try {
+          const [ru, rg] = await Promise.all([fetch('/api/users'), fetch('/api/groups')]);
+          allUsers = (await ru.json()).users || [];
+          allGroups = (await rg.json()).groups || [];
+        } catch (_) { showToast(t('assets.assign_load_err'), false); return; }
+      }
+      const cur = a.assignments || [];
+      const curUsers = new Set(cur.filter(x => x.type === 'user').map(x => x.id));
+      const curGroups = new Set(cur.filter(x => x.type === 'group').map(x => x.id));
+      const uChecks = allUsers.map(u => `
+        <label class="flex items-center gap-2 font-code-sm text-[13px] text-slate-700 cursor-pointer select-none py-0.5">
+          <input type="checkbox" class="am-user h-4 w-4 rounded border-slate-300 text-cyan-600" value="${u.id}" ${curUsers.has(u.id) ? 'checked' : ''} />
+          <span class="material-symbols-outlined text-[14px] text-cyan-500">person</span>${esc(u.username)}
+          <span class="font-label-caps text-[9px] text-slate-400">${esc(u.role)}</span>
+        </label>`).join('') || `<p class="font-code-sm text-[12px] text-slate-400">${t('assets.assign_no_users')}</p>`;
+      const gChecks = allGroups.map(g => `
+        <label class="flex items-center gap-2 font-code-sm text-[13px] text-slate-700 cursor-pointer select-none py-0.5">
+          <input type="checkbox" class="am-group h-4 w-4 rounded border-slate-300 text-violet-600" value="${g.id}" ${curGroups.has(g.id) ? 'checked' : ''} />
+          <span class="material-symbols-outlined text-[14px] text-violet-500">group</span>${esc(g.name)}
+        </label>`).join('') || `<p class="font-code-sm text-[12px] text-slate-400">${t('assets.assign_no_groups')}</p>`;
+      const overlay = document.createElement('div');
+      overlay.id = 'assignModal';
+      overlay.className = 'fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4';
+      overlay.innerHTML = `
+        <div class="neural-panel rounded-2xl p-6 w-full max-w-md bg-white">
+          <h3 class="font-label-caps text-label-caps text-slate-500 mb-1">${t('assets.assign_title')}</h3>
+          <p class="font-code-sm text-code-sm text-slate-900 font-semibold mb-4">${esc(a.ip)}</p>
+          <div class="grid grid-cols-2 gap-4 max-h-64 overflow-y-auto">
+            <div><p class="font-label-caps text-[10px] text-slate-400 mb-2">${t('assets.assign_users')}</p>${uChecks}</div>
+            <div><p class="font-label-caps text-[10px] text-slate-400 mb-2">${t('assets.assign_groups')}</p>${gChecks}</div>
+          </div>
+          <div class="flex items-center justify-end gap-2 mt-6">
+            <button id="am-cancel" class="text-slate-500 bg-slate-50 border border-slate-200 px-4 py-2 rounded-lg font-label-caps text-[10px] hover:bg-slate-100 transition">${t('common.cancel')}</button>
+            <button id="am-save" class="text-white bg-slate-900 hover:bg-slate-800 px-4 py-2 rounded-lg font-label-caps text-[10px] transition">${t('common.save')}</button>
+          </div>
+        </div>`;
+      document.body.appendChild(overlay);
+      overlay.querySelector('#am-cancel').addEventListener('click', () => overlay.remove());
+      overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+      overlay.querySelector('#am-save').addEventListener('click', async () => {
+        const user_ids = [...overlay.querySelectorAll('.am-user:checked')].map(c => parseInt(c.value, 10));
+        const group_ids = [...overlay.querySelectorAll('.am-group:checked')].map(c => parseInt(c.value, 10));
+        const r = await fetch(`/api/assets/${index}/assignments`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_ids, group_ids }),
+        });
+        const d = await r.json();
+        if (!r.ok) { showToast(d.error || t('assets.assign_err'), false); return; }
+        overlay.remove();
+        showToast(t('assets.assign_saved'));
+        await load();
+      });
+    }
 
     async function toggleAsset(index) {
       const a = assets.find((x) => x.index === index);
@@ -608,7 +694,17 @@
     $('exportAssetsCSV').addEventListener('click', () => exportCSV(_buildAssetRows(), 'assets.csv'));
     $('exportAssetsXLS').addEventListener('click', () => exportXLS(_buildAssetRows(), 'assets.xlsx'));
 
-    load();
+    // Ruolo corrente -> adatta la UI (form creazione nascosto ai viewer).
+    (window.vfaUser || Promise.resolve(null)).then((u) => {
+      const role = u ? u.role : null;
+      canWrite = role === 'admin' || role === 'manager' || role === 'editor';
+      canAssign = role === 'admin' || role === 'manager';
+      if (!canWrite) {
+        const form = document.querySelector('section.neural-panel');
+        if (form) form.style.display = 'none';   // prima section = NEW ASSET
+      }
+      load();
+    });
   </script>
 </body>
 

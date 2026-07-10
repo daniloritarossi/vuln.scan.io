@@ -27,6 +27,8 @@ chmod +x start.sh stop.sh
 
 As an alternative to `clone`, you can always download the artifact for a **tag/release** as a `.zip` package (repo *Tags* page → *Download ZIP*, or `<repo>/archive/refs/tags/<tag>.zip`): extract it and continue from `cd vulnerability_feed_aggregator` onward.
 
+To update an existing installation, see [Application updates](#application-updates) (`./start.sh update` → option 4).
+
 ---
 
 ## `start.sh` — startup and configuration
@@ -74,6 +76,59 @@ On first run (no `config.json`) the wizard asks for:
    - `Serper` — Google results, requires API key
 4. **Docker Linux test machine** — optional (see dedicated section)
 
+### Application updates
+
+The app checks GitHub for a newer tag than the local version (the one shown
+bottom-left in the sidebar):
+
+- **In the UI** — a discreet, dismissible banner appears at the bottom-left of
+  every page when a newer tag exists on GitHub ("New version vX available —
+  update with ./start.sh update"). The check runs server-side
+  (`GET /api/version/check`) and is cached for 6 hours; dismissing the banner
+  hides it until the *next* version. Repo overridable with the
+  `VFA_GITHUB_REPO` env var.
+- **From the CLI** — `./start.sh update` → "Controlla aggiornamenti
+  applicazione (GitHub)": compares the local git tag with the latest GitHub
+  tag and, on confirmation, downloads the sources:
+  - with a `.git` checkout: `git fetch --tags` + `git checkout <tag>`
+    (aborts if there are uncommitted local changes);
+  - without git: downloads the release tarball and applies it with `rsync`,
+    **preserving runtime files** (`config.json`, `.venv/`, `.encdec/`,
+    `.vfa_auth_secret`, Supabase data, logs).
+
+  Then relaunch with `./start.sh`: dependencies and DB schema are realigned
+  automatically at startup.
+
+#### How to update, step by step
+
+```bash
+# 1. Stop the app (FastAPI + Supabase stack)
+./stop.sh
+
+# 2. Open the update menu and pick option 4
+./start.sh update
+#    Cosa vuoi modificare?
+#      ...
+#      4) Controlla aggiornamenti applicazione (GitHub)
+#    -> shows local vs latest version, asks "Scaricare e installare ora? [s]"
+
+# 3. Relaunch: venv dependencies and the DB schema are realigned automatically
+./start.sh
+```
+
+Notes:
+
+- **What is never touched by an update**: `config.json` (wizard config and API
+  keys), `.venv/`, the `encdec` binary with your compiled secret
+  (`.encdec/`), the session-token secret (`.vfa_auth_secret`), the Supabase
+  data volume (scan history, users, findings) and the log files.
+- **Git checkout with local edits**: the updater refuses to run if
+  `git diff` is dirty — commit or stash your changes first, then retry.
+- **Rollback (git installs)**: every release is a tag, so
+  `git checkout <previous-tag>` followed by `./start.sh` brings you back.
+- Users are notified in the web UI too: a dismissible banner at the
+  bottom-left appears on every page when a newer version exists.
+
 ### `update` menu
 
 ```bash
@@ -87,8 +142,9 @@ Shows the current configuration and lets you:
 | 1 | Change AI provider (Ollama ↔ Claude) |
 | 2 | Change search engine (DuckDuckGo ↔ Serper) |
 | 3 | Create/start Docker Linux test machine |
-| 4 | Save and exit (config only, doesn't launch the app) |
-| 5 | Save and launch the app |
+| 4 | Check for application updates on GitHub (and download them) |
+| 5 | Save and exit (config only, doesn't launch the app) |
+| 6 | Save and launch the app |
 
 ---
 
@@ -328,6 +384,8 @@ start.sh ──► encdec setup ──► wizard config.json ──► .venv + d
 | File | Role |
 |------|------|
 | `app.py` | FastAPI server: page routing + REST API + SSE + SSH health check |
+| `auth.py` | Authentication & RBAC: PBKDF2 password hashing, signed session cookies, role dependencies, visibility cones, one-time tokens, rotation policy |
+| `mailer.py` | Transactional email (SMTP): account activation and password-reset links — never passwords |
 | `crypto.py` | encdec wrapper: asset password encryption/decryption |
 | `config.py` | Reads/writes `config.json`; embedded defaults |
 | `osint.py` | Identifies product and version from free-text description |
@@ -493,13 +551,17 @@ Visual states: `idle` (gray) → `running` (pulsing cyan) → `done` (green ✓)
 
 | Path | Content |
 |----------|-----------|
+| `/login` | Sign-in page + "forgot password" self-service |
+| `/activate` | Account activation / password reset via one-time link (no session needed: the token is the credential) |
+| `/change-password` | Password change, also in forced mode (first login, admin reset, expired rotation) |
 | `/` | Dashboard: scan, console, product graph, posture |
-| `/assets` | Asset inventory management with password encryption and SSH health check |
+| `/assets` | Asset inventory management with password encryption, SSH health check and per-asset user/group assignments (visibility cones) |
 | `/audit` | History of scans saved on Supabase |
 | `/findings` | Unified findings: external scanner report import, dedup, workflow states, SLA |
 | `/sbom` | SBOM: packages detected in the latest posture (SCA) scan, with CVE count per package; CycloneDX 1.5 / SPDX 2.3 export |
 | `/intel` | Manual OSINT lookup for a product/version |
-| `/settings` | AI and search engine configuration via UI |
+| `/settings` | AI and search engine configuration via UI (admin/manager) |
+| `/admin` | Users, groups and membership management (admin only) |
 
 ---
 
@@ -528,6 +590,21 @@ Visual states: `idle` (gray) → `running` (pulsing cyan) → `done` (green ✓)
   "osv": {
     "url": "https://api.osv.dev/v1/query",
     "timeout": 15
+  },
+  "smtp": {                         // invitation/reset emails (empty host = disabled)
+    "host": "",
+    "port": 587,
+    "username": "",
+    "password": "",
+    "use_tls": true,                // STARTTLS
+    "from_addr": "",
+    "base_url": "http://localhost:8000"   // base of the links inside emails
+  },
+  "auth": {                         // authentication policy
+    "rotation_days": 0,             // 0 = rotation disabled (NIST 800-63B)
+    "min_password_len": 12,
+    "invite_ttl_hours": 48,
+    "reset_ttl_hours": 4
   },
   "sla": {                          // remediation SLA days per severity
     "critical": 7,
@@ -587,8 +664,159 @@ Env overrides: `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `SUPABASE_PERSIST=0`.
 
 ---
 
+## Authentication & RBAC (visibility cones)
+
+Every page and API requires a session. Sign in at `/login`; sessions are
+HttpOnly cookies signed with HMAC-SHA256 (12 h TTL). On first startup the app
+seeds a default administrator:
+
+> **Default credentials: `admin` / `admin`** — the password change is
+> **forced at first login** (the app redirects to `/change-password` and
+> blocks everything else until the password is changed).
+
+### Roles
+
+| Role | Summary |
+|------|---------|
+| **admin** | Everything, including application configuration and user/group management |
+| **manager** | Everything except writing configuration and managing users; manages asset assignments; full audit |
+| **editor** | Works **only inside the visibility cone**: the assets assigned to them directly or through one of their groups |
+| **viewer** | Read-only: no scans, no imports, no exports, no audit; usernames redacted |
+
+### Visibility cone
+
+The editor's scope is defined by **asset assignments**, managed from the
+`ASSIGNED TO` column of the `/assets` page (admin/manager only):
+
+- an asset can be assigned to one or more **users** and/or **groups**;
+- a user can belong to **multiple groups** (managed in `/admin`);
+- an editor sees an asset if it is assigned to them **or** to a group they belong to;
+- an unassigned ("orphan") asset is visible only to admin/manager/viewer;
+- an editor creating an asset gets it **auto-assigned** to themselves (or to one
+  of their groups via `assign_group_id`), so they can never create assets
+  outside their own cone;
+- editors **cannot** change assignments (self-escalation prevention): only
+  admin and manager can.
+
+Aggregates are **recomputed inside the cone**, not masked: an editor's
+`/api/risk` score is calculated only on their assets, so nothing leaks about
+the rest of the fleet. In `/api/risk/trend` the per-run global counters are
+omitted for editors for the same reason.
+
+### Permission matrix
+
+| Endpoint | admin | manager | editor | viewer |
+|---|---|---|---|---|
+| `GET /api/assets`, `/api/assets/all` | all | all | only assigned assets | all, `username` redacted |
+| `POST /api/assets` | ✅ | ✅ | ✅ auto-assigned to self/own group | 403 |
+| `PUT /api/assets/{id}/assignments` | ✅ any user/group | ✅ any user/group | 403 (self-escalation) | 403 |
+| `PUT/PATCH/DELETE /api/assets/{id}` | ✅ | ✅ | ✅ only in scope | 403 |
+| `GET/POST/PUT/DELETE /api/users` | ✅ | GET only | 403 | 403 |
+| `GET /api/groups` | ✅ all | ✅ all | own groups only | 403 |
+| `POST/DELETE /api/groups`, `PUT .../members` | ✅ | 403 | 403 | 403 |
+| `GET /api/findings` | all | all | findings of assigned assets | all, read-only |
+| `POST /api/findings/import` | ✅ | ✅ | ✅ out-of-scope rows skipped (with count) | 403 |
+| `PATCH /api/findings/{id}/status` | ✅ | ✅ | ✅ only in scope | 403 |
+| `POST /api/findings/{id}/ticket` | ✅ | ✅ | ✅ only in scope | 403 |
+| `POST /api/findings/scan-local` | ✅ | ✅ | ✅ `asset_ip` required and in scope | 403 |
+| `GET /api/scan`, `/api/posture/scan` | ✅ | ✅ | only assigned assets | 403 |
+| `GET /api/settings` | ✅ | ✅ read | 403 | 403 |
+| `POST /api/settings` (app configuration) | ✅ **admin only** | 403 | 403 | 403 |
+| `GET /api/risk`, `/api/risk/trend` | all | all | recomputed on the cone only | all |
+| `GET /api/sbom` | full | full | cone only | full |
+| `GET /api/sbom/export` | full | full | cone only | 403 |
+| `GET /api/audit` | **all** | **all** | own-scope results only | 403 |
+
+Notes:
+
+- **`POST /api/settings` is admin-only by design**: configuration holds
+  secrets (API keys, ticketing credentials) and whoever writes it can redirect
+  ticketing/LLM traffic — that is a global privilege, no per-cone variant makes sense.
+- **`GET /api/scan` is an action, not a read**: the HTTP verb is misleading —
+  the scanner touches assets with credentials, so it is denied to viewers.
+- **Batch import with mixed hosts**: an editor importing a Trivy/Grype report
+  containing out-of-scope hosts gets those rows silently skipped with a count
+  in the response (`skipped_out_of_scope`), so CI pipelines don't break.
+
+### User onboarding via email (invitation links)
+
+New users are **invited, not provisioned with a password**: the admin never
+knows (or transmits) anyone's password.
+
+```
+Admin (/admin): INVITE USER with username + email + role
+      │
+      ▼
+App generates a one-time token (32 random bytes)
+  → only its SHA-256 hash is stored, with a 48 h expiry
+      │
+      ▼
+Email to the user with the activation link  /activate?token=…
+  (if SMTP is not configured, the link is shown to the admin
+   for manual delivery — the flow still works without email)
+      │
+      ▼
+User opens the link and chooses their own password (policy: min 12 chars)
+      │
+      ▼
+password set + account activated + email implicitly VERIFIED
+  (only the inbox owner could open the link) + token burned
+```
+
+Related flows, all built on the same one-time token mechanism:
+
+- **Password reset (admin-driven)** — `SEND RESET` button in `/admin`: the
+  user receives a reset link; the admin never types a password.
+- **Forgot password (self-service)** — "Password dimenticata?" on the login
+  page → `POST /api/forgot {email}`. The response is always identical whether
+  the email exists or not (no user enumeration).
+- **Temporary password (fallback)** — if the admin does set a password
+  directly (API `PUT /api/users/{id}` with `password`), the account is marked
+  `must_change_password`: at the next login the user is forced to change it
+  before doing anything else.
+- **Password rotation** — `auth.rotation_days` in `config.json` (Settings →
+  "EMAIL (SMTP) & AUTH POLICY"). When the password is older than the policy the
+  next request forces a change. **Default `0` = disabled**, per NIST 800-63B
+  (mandatory periodic rotation encourages weak incremental passwords); enable
+  it only if a compliance framework requires it.
+- **Global logout on password change** — session tokens carry their issue
+  time; any session issued *before* the last password change is rejected. A
+  password change/reset instantly invalidates every other open session.
+
+SMTP is configured in Settings (admin only): host, port, STARTTLS, credentials
+(masked like the other secrets), sender and the base URL used in email links.
+Empty host = email disabled, invitation links are handed to the admin manually.
+
+### Data model (Supabase)
+
+```
+users             (id, username UNIQUE, password_hash, role,
+                   email UNIQUE, email_verified_at, is_active,
+                   must_change_password, password_changed_at)
+groups            (id, name UNIQUE)
+user_groups       (user_id, group_id)              -- N:N membership
+asset_assignments (asset_id, user_id XOR group_id) -- the visibility cone
+auth_tokens       (user_id, token_hash UNIQUE, purpose activation|reset,
+                   expires_at, used_at)            -- one-time links (hash only)
+```
+
+- **User passwords** are hashed with **PBKDF2-HMAC-SHA256** (200k iterations,
+  random salt) — see `auth.py`. This is separate from asset SSH passwords,
+  which are encrypted with `encdec` (see below): user passwords only need to
+  be *verified*, asset passwords must be *recovered* to open SSH sessions.
+- The session token carries only `user_id` + expiry: **role and group
+  membership are re-read from the DB on every request**, so a role change or
+  group removal takes effect immediately (no stale JWT claims).
+- The HMAC secret is auto-generated at `.vfa_auth_secret` (mode 600,
+  gitignored) or supplied via the `VFA_AUTH_SECRET` env var.
+
+---
+
 ## Security
 
+- **User authentication** — mandatory login; PBKDF2-hashed passwords; signed HttpOnly session cookies; per-role authorization enforced **server-side on every endpoint** (the UI only hides what the role can't use)
+- **No passwords over email** — onboarding and reset use one-time links (only the SHA-256 hash of the token is stored); opening the link doubles as email verification
+- **Forced password change** — default admin, admin-set temporary passwords and expired rotations all force a change at next access; changing a password invalidates every previously issued session
 - **Passwords at rest** — encrypted with AES-GCM using a secret prefix compiled into the `encdec` binary; never plaintext on disk
 - **SSH host key** — `RejectPolicy` (no auto-accept)
 - **simulate_auth: true** (default) — no SSH login performed during scanning
