@@ -255,7 +255,9 @@ def api_version_check(user: CurrentUser = Depends(get_current_user)):
     Risposta cache-ata lato server (6h) per non consumare rate limit.
     {current, latest, update_available, repo_url}
     """
-    current = _base_tag(APP_VERSION)
+    # Riletta a ogni chiamata: APP_VERSION e' congelata all'avvio del processo
+    # e diventa stantia se nel frattempo viene creato/checkout-ato un tag.
+    current = _base_tag(_git_version())
     latest = _fetch_latest_tag()
     update = False
     if latest and latest != current:
