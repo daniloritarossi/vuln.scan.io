@@ -237,6 +237,20 @@
             <option value="gitleaks">gitleaks</option>
             <option value="trufflehog">trufflehog</option>
           </select>
+          <select id="fNis2"
+            class="font-code-sm text-[12px] text-slate-700 bg-white border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-cyan-300">
+            <option value="" data-i18n="find.f_nis2">ALL NIS2 MEASURES</option>
+            <option value="21.2.a">21.2.a — Risk analysis &amp; security policy</option>
+            <option value="21.2.b">21.2.b — Incident handling</option>
+            <option value="21.2.c">21.2.c — Business continuity</option>
+            <option value="21.2.d">21.2.d — Supply chain security</option>
+            <option value="21.2.e">21.2.e — Vulnerability handling</option>
+            <option value="21.2.f">21.2.f — Effectiveness assessment</option>
+            <option value="21.2.g">21.2.g — Cyber hygiene &amp; training</option>
+            <option value="21.2.h">21.2.h — Cryptography</option>
+            <option value="21.2.i">21.2.i — Access control &amp; asset mgmt</option>
+            <option value="21.2.j">21.2.j — MFA &amp; secured comms</option>
+          </select>
           <div class="relative flex-1 min-w-[220px] max-w-md">
             <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-base">search</span>
             <input id="fSearch" type="text" data-i18n-ph="find.search_ph" placeholder="Search package, CVE, asset…"
@@ -348,11 +362,13 @@
 
       function render() {
         const st = $('fStatus').value, sev = $('fSev').value,
-          src = $('fSource').value, q = $('fSearch').value.trim().toLowerCase();
+          src = $('fSource').value, nis2 = $('fNis2').value,
+          q = $('fSearch').value.trim().toLowerCase();
         const rows = ALL.filter((r) =>
           (!st || r.status === st) &&
           (!sev || (r.severity || '').toUpperCase() === sev) &&
           (!src || (r.source || '').includes(src)) &&
+          (!nis2 || ((r.compliance || {}).nis2 || []).some((n) => n.startsWith(nis2 + ' '))) &&
           (!q || JSON.stringify(r).toLowerCase().includes(q)));
         $('rowCount').textContent = rows.length + ' / ' + ALL.length;
         $('emptyMsg').classList.toggle('hidden', rows.length > 0);
@@ -530,7 +546,7 @@
         }
       });
 
-      ['fStatus', 'fSev', 'fSource'].forEach((id) => $(id).addEventListener('change', render));
+      ['fStatus', 'fSev', 'fSource', 'fNis2'].forEach((id) => $(id).addEventListener('change', render));
       $('fSearch').addEventListener('input', render);
       window.addEventListener('langchange', render);
 

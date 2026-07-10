@@ -91,8 +91,12 @@ OWASP_TITLES = {
 # Misure minime pertinenti per categoria di finding.
 
 NIS2_TITLES = {
+    "21.2.a": "Risk analysis and security policy",
+    "21.2.b": "Incident handling",
+    "21.2.c": "Business continuity and crisis management",
     "21.2.d": "Supply chain security",
     "21.2.e": "Vulnerability handling and disclosure",
+    "21.2.f": "Security measures effectiveness assessment",
     "21.2.g": "Cyber hygiene and training",
     "21.2.h": "Cryptography and encryption",
     "21.2.i": "Access control and asset management",
@@ -104,16 +108,20 @@ _SOURCE_DEFAULTS = {
     "posture":    {"owasp": ["A06"], "nis2": ["21.2.d", "21.2.e"]},
     "trivy":      {"owasp": ["A06"], "nis2": ["21.2.d", "21.2.e"]},
     "grype":      {"owasp": ["A06"], "nis2": ["21.2.d", "21.2.e"]},
-    "nuclei":     {"owasp": ["A05"], "nis2": ["21.2.e"]},
-    "semgrep":    {"owasp": [],      "nis2": ["21.2.e"]},
+    "nuclei":     {"owasp": ["A05"], "nis2": ["21.2.e", "21.2.f"]},
+    "semgrep":    {"owasp": [],      "nis2": ["21.2.e", "21.2.f"]},
     "gitleaks":   {"owasp": ["A07"], "nis2": ["21.2.h", "21.2.i"]},
     "trufflehog": {"owasp": ["A07"], "nis2": ["21.2.h", "21.2.i"]},
 }
 
+# A04/A08/A09 pescano anche in a/c/b: sono proxy euristici (nessuna colonna
+# scanner attesta direttamente risk-analysis/continuity/incident-handling),
+# ma coprono le lettere altrimenti irraggiungibili dell'art. 21(2).
 _OWASP_TO_NIS2 = {
     "A01": ["21.2.i"], "A02": ["21.2.h"], "A03": ["21.2.e"],
-    "A04": ["21.2.e"], "A05": ["21.2.e", "21.2.g"], "A06": ["21.2.d", "21.2.e"],
-    "A07": ["21.2.i", "21.2.j"], "A08": ["21.2.d"], "A09": ["21.2.e"],
+    "A04": ["21.2.a", "21.2.e"], "A05": ["21.2.e", "21.2.g"],
+    "A06": ["21.2.d", "21.2.e"], "A07": ["21.2.i", "21.2.j"],
+    "A08": ["21.2.c", "21.2.d"], "A09": ["21.2.b", "21.2.e"],
     "A10": ["21.2.e"],
 }
 
