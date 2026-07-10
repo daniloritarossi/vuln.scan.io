@@ -8,6 +8,7 @@ Backend **FastAPI** · Frontend **HTML + Tailwind** (CDN) · real-time results v
 
 ![Home](static/screens/home1.png)
 ![Home](static/screens/home2.png)
+![Home](static/screens/app_sec_posture.png)
 ---
 
 ## Installation
