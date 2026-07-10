@@ -13,8 +13,10 @@ Backend **FastAPI** · Frontend **HTML + Tailwind** (CDN) · real-time results v
 
 ## Installation
 
-Requires: **Python 3.10+**, `pip`, `venv`, **Docker**, **Go ≥ 1.21** (to build `encdec`).
-On Debian/Ubuntu: `sudo apt install python3-pip python3-venv golang`
+Requires: **Python 3.10+**, `pip`, `venv`, `curl`, `git`, **Docker** (with the `docker compose` v2 plugin), **Go ≥ 1.21** (to build `encdec`).
+On Debian/Ubuntu: `sudo apt install python3-pip python3-venv curl git golang docker-compose-plugin`
+
+**Missing dependencies are installed automatically.** At every launch `start.sh` runs a preflight on `python3`/`venv`/`curl`/`git` and, before using them, checks Go (≥ 1.21), Docker (binary + running daemon) and the `docker compose` v2 plugin: anything missing is installed via `apt` (sudo prompt) — if `apt` is unavailable or the install fails, the script aborts with manual instructions. **Ollama** does not need to be pre-installed either: if the AI wizard points at a local URL and the binary is missing, it is installed via the official `ollama.com` script, the server is started if needed, the chosen model (default `qwen2.5:7b`) is pulled and its availability verified via `/api/tags`.
 
 ### First run (interactive wizard)
 
@@ -40,7 +42,9 @@ The script is the single entry point. It handles, in sequence: password encrypti
 ```
 start.sh
  │
- ├─ 1) encdec setup      ──► first run: asks for a secret prefix → patches source → compiles binary
+ ├─ 0) Preflight         ──► python3 / venv / curl / git: auto-install via apt if missing
+ │
+ ├─ 1) encdec setup      ──► first run: asks for a secret prefix → patches source → compiles binary (Go ≥ 1.21 verified)
  │                            later runs: binary already present, no interaction
  │
  ├─ 2) Wizard / Update
@@ -69,7 +73,7 @@ On first run (no `config.json`) the wizard asks for:
 
 1. **encdec secret prefix** — entered once; compiled into the binary (see the Password Encryption section)
 2. **AI model**:
-   - `Local` → Ollama (checks reachability, runs `ollama pull`)
+   - `Local` → Ollama (auto-installs if missing, starts the server, runs `ollama pull`, verifies the model via `/api/tags`)
    - `Remote` → Claude API (requires API key)
 3. **OSINT search engine**:
    - `DuckDuckGo` — free, no API key

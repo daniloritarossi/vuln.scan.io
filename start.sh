@@ -24,6 +24,49 @@ for _arg in "$@"; do
   esac
 done
 
+# ── Preflight: dipendenze di sistema richieste da wizard/encdec/venv ─────────
+# Se mancano, tenta l'installazione automatica via apt (sudo). Fallback: hint.
+
+_apt_install() {
+  # _apt_install pkg... → true se installazione riuscita
+  if ! command -v apt-get >/dev/null 2>&1; then
+    printf 'apt non disponibile — installa manualmente: %s\n' "$*" >&2
+    return 1
+  fi
+  printf '==> installo automaticamente: %s (sudo richiesto)\n' "$*" >&2
+  sudo apt-get update -qq >&2 || true
+  sudo apt-get install -y "$@" >&2
+}
+
+_preflight() {
+  local _missing=()
+  for _b in python3 curl git; do
+    command -v "$_b" >/dev/null 2>&1 || _missing+=("$_b")
+  done
+  command -v python3 >/dev/null 2>&1 && ! python3 -c 'import venv' 2>/dev/null \
+    && _missing+=("python3-venv")
+  [ "${#_missing[@]}" -eq 0 ] && return 0
+
+  printf 'Dipendenze di sistema mancanti: %s\n' "${_missing[*]}" >&2
+  if ! _apt_install "${_missing[@]}"; then
+    printf 'ERRORE: installazione fallita. Manuale: sudo apt install %s\n' "${_missing[*]}" >&2
+    exit 1
+  fi
+  # ricontrollo post-install
+  for _b in python3 curl git; do
+    if ! command -v "$_b" >/dev/null 2>&1; then
+      printf 'ERRORE: %s ancora mancante dopo installazione.\n' "$_b" >&2
+      exit 1
+    fi
+  done
+  if ! python3 -c 'import venv' 2>/dev/null; then
+    printf 'ERRORE: modulo venv ancora mancante (python3-venv).\n' >&2
+    exit 1
+  fi
+  printf '✓ Dipendenze installate.\n' >&2
+}
+_preflight
+
 # ── UI helpers ────────────────────────────────────────────────────────────────
 
 _ask() {
@@ -143,14 +186,41 @@ _wizard_ai() {
     _model=$(_ask "Modello Ollama" "qwen2.5:7b")
     _json_write "ai.provider=ollama" "ai.ollama_url=$_url" "ai.ollama_model=$_model"
     printf '  ✓  Provider: Ollama (%s)\n' "$_model" >&2
-    # verifica raggiungibilità
     local _base="${_url%/api/generate}"
+    local _is_local=0
+    case "$_base" in *localhost*|*127.0.0.1*) _is_local=1 ;; esac
+
+    # URL locale + binario assente -> installazione automatica (script ufficiale)
+    if [ "$_is_local" = "1" ] && ! command -v ollama >/dev/null 2>&1; then
+      printf '  Ollama non installato — installo (script ufficiale ollama.com, sudo richiesto).\n' >&2
+      curl -fsSL https://ollama.com/install.sh | sh >&2 \
+        || printf '  ⚠  Installazione fallita — installa manualmente: https://ollama.com/download\n' >&2
+    fi
+
+    # server locale installato ma non attivo -> avvialo in background
+    if [ "$_is_local" = "1" ] && command -v ollama >/dev/null 2>&1 \
+       && ! curl -sf --max-time 3 "$_base" >/dev/null 2>&1; then
+      printf '  ==> avvio ollama serve (background)...\n' >&2
+      (ollama serve >/dev/null 2>&1 &)
+      sleep 2
+    fi
+
+    # verifica raggiungibilità + presenza modello (via /api/tags)
     if curl -sf --max-time 3 "$_base" >/dev/null 2>&1; then
       printf '  ✓  Ollama raggiungibile.\n' >&2
-      if command -v ollama >/dev/null 2>&1; then
-        printf '  ==> ollama pull %s\n' "$_model" >&2
-        ollama pull "$_model" >&2 2>/dev/null \
-          || printf '  ⚠  pull fallito — esegui manualmente: ollama pull %s\n' "$_model" >&2
+      if ! curl -sf --max-time 5 "$_base/api/tags" 2>/dev/null | grep -q "\"$_model"; then
+        if command -v ollama >/dev/null 2>&1; then
+          printf '  ==> ollama pull %s\n' "$_model" >&2
+          ollama pull "$_model" >&2 \
+            || printf '  ⚠  pull fallito — esegui manualmente: ollama pull %s\n' "$_model" >&2
+        else
+          printf '  ⚠  Modello assente sul server remoto: esegui li'"'"' "ollama pull %s".\n' "$_model" >&2
+        fi
+      fi
+      if curl -sf --max-time 5 "$_base/api/tags" 2>/dev/null | grep -q "\"$_model"; then
+        printf '  ✓  Modello %s presente.\n' "$_model" >&2
+      else
+        printf '  ⚠  Modello %s NON verificato — le funzioni AI falliranno finche'"'"' non e'"'"' disponibile.\n' "$_model" >&2
       fi
     else
       printf '  ⚠  Ollama non raggiungibile a %s\n     Assicurati che sia avviato prima di usare le funzioni AI.\n' "$_base" >&2
@@ -585,9 +655,19 @@ if [ ! -x "$ENCDEC_BIN" ]; then
   printf '  Il prefisso segreto verra'"'"' compilato nel binario e non\n'
   printf '  sara'"'"' mai piu'"'"' richiesto ne'"'"' salvato su disco.\n\n'
 
-  if ! command -v go >/dev/null 2>&1; then
-    printf '  ERRORE: Go non trovato. Installa Go >= 1.21 e riprova.\n' >&2
-    exit 1
+  _go_ok() {
+    command -v go >/dev/null 2>&1 || return 1
+    local _maj _min
+    read -r _maj _min <<< "$(go version | sed -E 's/.*go([0-9]+)\.([0-9]+).*/\1 \2/')"
+    [ "$_maj" -gt 1 ] || { [ "$_maj" -eq 1 ] && [ "$_min" -ge 21 ]; }
+  }
+  if ! _go_ok; then
+    printf '  Go >= 1.21 non trovato — provo installazione automatica (apt).\n' >&2
+    _apt_install golang || true
+    if ! _go_ok; then
+      printf '  ERRORE: Go >= 1.21 non disponibile. Installa manualmente da https://go.dev/dl/\n' >&2
+      exit 1
+    fi
   fi
 
   _PFX1=$(_ask_secret "Prefisso segreto per cifratura (inserito una sola volta)")
@@ -664,9 +744,31 @@ echo "==> installo/aggiorno dipendenze (requirements.txt)"
 # ── 2) Stack Supabase (Docker) ────────────────────────────────────────────────
 
 if [ "$WITH_SUPABASE" = "1" ]; then
+  if ! command -v docker >/dev/null 2>&1; then
+    echo "Docker non installato — provo installazione automatica (apt)." >&2
+    _apt_install docker.io || true
+    if ! command -v docker >/dev/null 2>&1; then
+      echo "ERRORE: Docker non installabile automaticamente. Vedi https://docs.docker.com/engine/install/" >&2
+      exit 1
+    fi
+  fi
   if ! docker info >/dev/null 2>&1; then
-    echo "ERRORE: Docker non in esecuzione. Avvia Docker e riprova." >&2
-    exit 1
+    echo "==> Docker daemon fermo — provo ad avviarlo (sudo systemctl start docker)" >&2
+    sudo systemctl start docker >/dev/null 2>&1 || true
+    sleep 2
+    if ! docker info >/dev/null 2>&1; then
+      echo "ERRORE: Docker non in esecuzione o permessi mancanti." >&2
+      echo "  Se il daemon e' attivo ma l'accesso e' negato: sudo usermod -aG docker \$USER  (poi logout/login)" >&2
+      exit 1
+    fi
+  fi
+  if ! docker compose version >/dev/null 2>&1; then
+    echo "Plugin 'docker compose' (v2) mancante — provo installazione automatica." >&2
+    _apt_install docker-compose-plugin || _apt_install docker-compose-v2 || true
+    if ! docker compose version >/dev/null 2>&1; then
+      echo "ERRORE: plugin 'docker compose' v2 non installabile. Manuale: sudo apt install docker-compose-v2" >&2
+      exit 1
+    fi
   fi
   echo "==> avvio Supabase locale (Docker)"
   ( cd supabase && ./setup.sh )
