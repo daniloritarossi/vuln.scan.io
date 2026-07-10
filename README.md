@@ -35,7 +35,7 @@ To update an existing installation, see [Application updates](#application-updat
 
 The script is the single entry point. It handles, in sequence: password encryption, AI/search configuration, Docker test machine, virtualenv, Supabase and the FastAPI server.
 
-### Execution phases
+### Execution phases 
 
 ```
 start.sh
