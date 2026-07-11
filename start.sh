@@ -111,6 +111,26 @@ _install_go_tarball() {
   hash -r 2>/dev/null || true   # invalida path cache di bash (es. /usr/bin/go di apt)
 }
 
+_install_compose_plugin() {
+  # Installa il plugin 'docker compose' v2 da GitHub releases.
+  # Fallback quando il package manager non lo offre (es. Debian 12 senza repo Docker).
+  local _sudo="" _arch _dir=/usr/local/lib/docker/cli-plugins
+  if [ "$(id -u)" -ne 0 ]; then
+    command -v sudo >/dev/null 2>&1 && _sudo="sudo" || return 1
+  fi
+  case "$(uname -m)" in
+    x86_64)        _arch=x86_64 ;;
+    aarch64|arm64) _arch=aarch64 ;;
+    *)             return 1 ;;
+  esac
+  printf '==> installo docker compose v2 da GitHub releases in %s\n' "$_dir" >&2
+  $_sudo mkdir -p "$_dir"
+  $_sudo curl -fsSL \
+    "https://github.com/docker/compose/releases/latest/download/docker-compose-linux-${_arch}" \
+    -o "$_dir/docker-compose" || return 1
+  $_sudo chmod +x "$_dir/docker-compose"
+}
+
 _preflight() {
   local _missing=()
   for _b in python3 curl git; do
@@ -939,7 +959,7 @@ if [ "$WITH_SUPABASE" = "1" ]; then
   fi
   if ! docker compose version >/dev/null 2>&1; then
     echo "Plugin 'docker compose' (v2) mancante — provo installazione automatica." >&2
-    _apt_install docker-compose-plugin || _apt_install docker-compose-v2 || true
+    _apt_install docker-compose-plugin || _apt_install docker-compose-v2 || _install_compose_plugin || true
     if ! docker compose version >/dev/null 2>&1; then
       echo "ERRORE: plugin 'docker compose' v2 non installabile. Installa manualmente il plugin compose v2 per la tua distro." >&2
       exit 1
