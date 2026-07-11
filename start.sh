@@ -116,7 +116,8 @@ _preflight() {
   for _b in python3 curl git; do
     command -v "$_b" >/dev/null 2>&1 || _missing+=("$_b")
   done
-  command -v python3 >/dev/null 2>&1 && ! python3 -c 'import venv' 2>/dev/null \
+  # 'import venv' passa anche senza python3-venv (Debian): serve ensurepip
+  command -v python3 >/dev/null 2>&1 && ! python3 -c 'import venv, ensurepip' 2>/dev/null \
     && _missing+=("python3-venv")
   [ "${#_missing[@]}" -eq 0 ] && return 0
 
@@ -132,8 +133,8 @@ _preflight() {
       exit 1
     fi
   done
-  if ! python3 -c 'import venv' 2>/dev/null; then
-    printf 'ERRORE: modulo venv ancora mancante (python3-venv).\n' >&2
+  if ! python3 -c 'import venv, ensurepip' 2>/dev/null; then
+    printf 'ERRORE: modulo venv/ensurepip ancora mancante (python3-venv).\n' >&2
     exit 1
   fi
   printf '✓ Dipendenze installate.\n' >&2
