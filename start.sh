@@ -87,6 +87,30 @@ _pkg_install() {
 # retrocompatibilità con i call-site esistenti
 _apt_install() { _pkg_install "$@"; }
 
+_install_go_tarball() {
+  # Installa l'ultima release ufficiale di Go in /usr/local/go.
+  # Fallback quando il package manager non offre Go >= 1.21 (es. Debian 12).
+  local _sudo="" _v _arch _tmp
+  if [ "$(id -u)" -ne 0 ]; then
+    command -v sudo >/dev/null 2>&1 && _sudo="sudo" || return 1
+  fi
+  case "$(uname -m)" in
+    x86_64)        _arch=amd64 ;;
+    aarch64|arm64) _arch=arm64 ;;
+    *)             return 1 ;;
+  esac
+  _v=$(curl -fsSL 'https://go.dev/VERSION?m=text' 2>/dev/null | head -n1)
+  case "$_v" in go[0-9]*) ;; *) return 1 ;; esac   # sanity: atteso "go1.XX.Y"
+  printf '==> installo %s da go.dev in /usr/local/go\n' "$_v" >&2
+  _tmp=$(mktemp)
+  curl -fsSL "https://go.dev/dl/${_v}.linux-${_arch}.tar.gz" -o "$_tmp" || { rm -f "$_tmp"; return 1; }
+  $_sudo rm -rf /usr/local/go
+  $_sudo tar -C /usr/local -xzf "$_tmp" || { rm -f "$_tmp"; return 1; }
+  rm -f "$_tmp"
+  export PATH="/usr/local/go/bin:$PATH"
+  hash -r 2>/dev/null || true   # invalida path cache di bash (es. /usr/bin/go di apt)
+}
+
 _preflight() {
   local _missing=()
   for _b in python3 curl git; do
@@ -765,6 +789,10 @@ if [ ! -x "$ENCDEC_BIN" ]; then
     printf '  Go >= 1.21 non trovato — provo installazione automatica (package manager).\n' >&2
     _apt_install golang || true
     if ! _go_ok; then
+      printf '  Go da package manager assente o troppo vecchio — provo tarball ufficiale go.dev.\n' >&2
+      _install_go_tarball || true
+    fi
+    if ! _go_ok; then
       printf '  ERRORE: Go >= 1.21 non disponibile. Installa manualmente da https://go.dev/dl/\n' >&2
       exit 1
     fi
@@ -896,6 +924,15 @@ if [ "$WITH_SUPABASE" = "1" ]; then
       echo "ERRORE: Docker non in esecuzione o permessi mancanti." >&2
       echo "  Se il daemon e' attivo ma l'accesso e' negato: sudo usermod -aG docker \$USER  (poi logout/login)" >&2
       echo "  Se il daemon non parte: controlla /var/log/dockerd.log o 'journalctl -u docker'." >&2
+      if [ "$(id -u)" -eq 0 ] && [ -f /var/log/dockerd.log ] \
+         && grep -q "you must be root\|Permission denied" /var/log/dockerd.log 2>/dev/null; then
+        echo "" >&2
+        echo "  Rilevato ambiente confinato: il kernel nega iptables/nftables anche a root." >&2
+        echo "  Probabilmente sei in un container non privilegiato (es. LXC). Opzioni:" >&2
+        echo "    - Proxmox LXC (da host): pct set <ID> --features nesting=1,keyctl=1  poi riavvia il container" >&2
+        echo "    - usa una VM invece di un container" >&2
+        echo "    - salta Docker/Supabase: ./start.sh --no-supabase" >&2
+      fi
       exit 1
     fi
   fi
