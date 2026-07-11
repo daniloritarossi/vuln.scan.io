@@ -870,13 +870,32 @@ if [ "$WITH_SUPABASE" = "1" ]; then
   if ! docker info >/dev/null 2>&1; then
     echo "==> Docker daemon fermo — provo ad avviarlo" >&2
     _sv=""; [ "$(id -u)" -ne 0 ] && _sv="sudo"
-    $_sv systemctl start docker >/dev/null 2>&1 \
-      || $_sv service docker start >/dev/null 2>&1 \
-      || $_sv rc-service docker start >/dev/null 2>&1 || true
-    sleep 2
+    if command -v systemctl >/dev/null 2>&1; then
+      $_sv systemctl start docker >/dev/null 2>&1 || true
+    elif command -v rc-service >/dev/null 2>&1; then
+      $_sv rc-service docker start >/dev/null 2>&1 || true
+      $_sv rc-update add docker default >/dev/null 2>&1 || true
+    elif command -v service >/dev/null 2>&1; then
+      $_sv service docker start >/dev/null 2>&1 || true
+    fi
+    # attesa avvio: fino a 20s
+    for _i in 1 2 3 4 5 6 7 8 9 10; do
+      docker info >/dev/null 2>&1 && break
+      sleep 2
+    done
+    # nessun init system utilizzabile (container/WSL) -> dockerd diretto
+    if ! docker info >/dev/null 2>&1 && command -v dockerd >/dev/null 2>&1; then
+      echo "==> init system non disponibile — avvio dockerd in background (log: /var/log/dockerd.log)" >&2
+      $_sv sh -c 'nohup dockerd >/var/log/dockerd.log 2>&1 &' || true
+      for _i in 1 2 3 4 5 6 7 8 9 10; do
+        docker info >/dev/null 2>&1 && break
+        sleep 2
+      done
+    fi
     if ! docker info >/dev/null 2>&1; then
       echo "ERRORE: Docker non in esecuzione o permessi mancanti." >&2
       echo "  Se il daemon e' attivo ma l'accesso e' negato: sudo usermod -aG docker \$USER  (poi logout/login)" >&2
+      echo "  Se il daemon non parte: controlla /var/log/dockerd.log o 'journalctl -u docker'." >&2
       exit 1
     fi
   fi
