@@ -1,26 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <!-- Caldera — favicon -->
   <circle cx="16" cy="16" r="15.5" fill="#ffffff" stroke="#f97316" stroke-width="1"/>
-  <!-- Radar rings -->
-  <circle cx="16" cy="12" r="9" fill="none" stroke="#f97316" stroke-width="0.5" opacity="0.35"/>
-  <circle cx="16" cy="12" r="5.5" fill="none" stroke="#f97316" stroke-width="0.6" opacity="0.5"/>
-  <!-- Crosshair -->
-  <line x1="16" y1="2"  x2="16" y2="8.5"  stroke="#f97316" stroke-width="1.1"/>
-  <line x1="16" y1="15.5" x2="16" y2="22" stroke="#f97316" stroke-width="1.1"/>
-  <line x1="2"  y1="12" x2="8.5"  y2="12" stroke="#f97316" stroke-width="1.1"/>
-  <line x1="23.5" y1="12" x2="30" y2="12" stroke="#f97316" stroke-width="1.1"/>
-  <!-- Target dot -->
-  <circle cx="16" cy="12" r="2" fill="#f97316"/>
-  <circle cx="16" cy="12" r="0.8" fill="#fff"/>
-  <!-- Volcano -->
-  <polygon points="16,15 5,27 27,27" fill="#ea580c"/>
-  <polygon points="16,15 12,23 20,23" fill="#fb923c" opacity="0.9"/>
-  <!-- Lava -->
-  <path d="M14.5,17.5 Q11,22 9,26"  stroke="#fff7ed" stroke-width="1.5" fill="none" stroke-linecap="round" opacity="0.9"/>
-  <path d="M17.5,18 Q20,23 22,26"   stroke="#ffedd5" stroke-width="1.2" fill="none" stroke-linecap="round" opacity="0.9"/>
-  <!-- Base bar -->
-  <rect x="5" y="27" width="22" height="2" fill="#c2410c" rx="0.5"/>
-  <!-- Circuit dots -->
-  <circle cx="9"  cy="29.5" r="0.9" fill="#f97316" opacity="0.8"/>
-  <circle cx="16" cy="30"   r="0.9" fill="#fdba74" opacity="0.9"/>
-  <circle cx="23" cy="29.5" r="0.9" fill="#f97316" opacity="0.8"/>
+  <!-- Outer ring -->
+  <circle cx="16" cy="16" r="10.5" fill="none" stroke="#1e293b" stroke-width="2.6"/>
+  <!-- Broken crater rim -->
+  <g fill="none" stroke="#1e293b" stroke-width="1.8" stroke-linecap="round" opacity="0.5">
+    <path d="M16 10 A6 6 0 0 1 21.2 13"/>
+    <path d="M21.2 19 A6 6 0 0 1 10.8 19"/>
+    <path d="M10.8 13 A6 6 0 0 1 13.9 10.4"/>
+  </g>
+  <!-- Magma core -->
+  <circle cx="16" cy="16" r="3" fill="#f97316"/>
 </svg>

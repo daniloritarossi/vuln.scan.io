@@ -1,7 +1,7 @@
 {# Shared top app bar.
-   Expects one of:
-     - crumbs: breadcrumb [{key, text, href?}] — last item = current page
-     - top_tag_key, top_tag_text: legacy single chip (e.g. status on dashboard) #}
+Expects one of:
+- crumbs: breadcrumb [{key, text, href?}] — last item = current page
+- top_tag_key, top_tag_text: legacy single chip (e.g. status on dashboard) #}
 <!-- Dark theme (opt-in): default light. Restore prima del paint per evitare flash. -->
 <link rel="stylesheet" href="/static/theme-dark.css" />
 <script>
@@ -18,7 +18,13 @@
   class="fixed top-0 w-full z-50 bg-white/80 backdrop-blur-xl border-b border-slate-200/50 flex justify-between items-center px-margin-desktop h-16 transition-all">
   <div class="flex items-center gap-4">
     <img src="/static/logo-icon-animated.svg" class="w-11 h-11" alt="VULN.SCAN.IO" />
-    <h1 class="font-headline-md text-headline-md font-bold tracking-tight"><span class="text-orange-500">VULN</span><span class="text-slate-400">.</span><span class="text-orange-500">SCAN</span><span class="text-slate-400">.</span><span class="text-cyan-500">IO</span></h1>
+    <h1 class="font-headline-md text-headline-md font-bold tracking-tight">
+      <span class="text-dark400">VULN</span>
+      <span class="text-orange-500">.</span>
+      <span class="text-dark-400">SCAN</span>
+      <span class="text-orange-500">.</span>
+      <span class="text-orange-500">IO</span>
+    </h1>
     {% if crumbs is defined %}
     <nav aria-label="breadcrumb"
       class="ml-4 hidden md:flex items-center gap-1.5 px-2.5 py-1 bg-cyan-50 rounded-full border border-cyan-100/50">
@@ -46,7 +52,8 @@
     <div id="userChip" class="hidden items-center gap-2 bg-slate-100 rounded-full pl-3 pr-1 py-1">
       <span class="material-symbols-outlined text-[15px] text-cyan-600">person</span>
       <span id="userChipName" class="font-code-sm text-[12px] text-slate-700"></span>
-      <span id="userChipRole" class="font-label-caps text-[9px] text-white bg-slate-500 px-2 py-0.5 rounded-full"></span>
+      <span id="userChipRole"
+        class="font-label-caps text-[9px] text-white bg-slate-500 px-2 py-0.5 rounded-full"></span>
       <a href="/logout" title="Logout"
         class="flex items-center justify-center w-6 h-6 rounded-full text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors">
         <span class="material-symbols-outlined text-[15px]">logout</span>
@@ -56,8 +63,7 @@
       <button data-lang-btn="en" class="px-2 py-1 rounded-md font-label-caps text-[10px] transition-colors">EN</button>
       <button data-lang-btn="it" class="px-2 py-1 rounded-md font-label-caps text-[10px] transition-colors">IT</button>
     </div>
-    <button id="themeToggle" type="button" aria-label="Toggle dark theme" aria-pressed="false"
-      title="Light / Dark"
+    <button id="themeToggle" type="button" aria-label="Toggle dark theme" aria-pressed="false" title="Light / Dark"
       class="text-slate-500 hover:text-cyan-600 hover:glow-sm transition-all duration-150 cursor-pointer flex items-center">
       <span class="material-symbols-outlined">sensors</span>
     </button>

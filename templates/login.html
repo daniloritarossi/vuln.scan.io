@@ -35,14 +35,20 @@
     }
   </script>
   <style>
-    .material-symbols-outlined { font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    }
+
     .neural-panel {
       background: rgba(255, 255, 255, 0.8);
       backdrop-filter: blur(20px);
       border: 1px solid rgba(255, 255, 255, 0.5);
       box-shadow: 0 4px 24px -1px rgba(0, 0, 0, 0.08);
     }
-    body { background: linear-gradient(135deg, #f8fafc 0%, #e0f2fe 100%); }
+
+    body {
+      background: linear-gradient(135deg, #f8fafc 0%, #e0f2fe 100%);
+    }
   </style>
   <script src="/static/i18n.js?v=17"></script>
 </head>
@@ -52,31 +58,41 @@
     <div class="flex flex-col items-center mb-8">
       <img src="/static/logo-icon-animated.svg" class="w-16 h-16 mb-3" alt="VULN.SCAN.IO" />
       <h1 class="font-headline-md text-headline-md font-bold tracking-tight">
-        <span class="text-orange-500">VULN</span><span class="text-slate-400">.</span><span
-          class="text-orange-500">SCAN</span><span class="text-slate-400">.</span><span
-          class="text-cyan-500">IO</span>
+        <span class="text-dark400">VULN</span>
+        <span class="text-orange-500">.</span>
+        <span class="text-dark-400">SCAN</span>
+        <span class="text-orange-500">.</span>
+        <span class="text-orange-500">IO</span>
       </h1>
       <p class="font-label-caps text-label-caps text-slate-400 mt-2" data-i18n="login.title">SIGN IN</p>
     </div>
     <form id="loginForm" class="space-y-4" autocomplete="on">
       <div>
-        <label class="font-label-caps text-label-caps text-slate-500 block mb-1.5" for="username" data-i18n="login.username">USERNAME</label>
+        <label class="font-label-caps text-label-caps text-slate-500 block mb-1.5" for="username"
+          data-i18n="login.username">USERNAME</label>
         <input id="username" name="username" type="text" required autofocus autocomplete="username"
           class="w-full bg-white/80 border border-slate-200 rounded-xl px-4 py-2.5 font-code-sm text-code-sm focus:outline-none focus:border-cyan-300 focus:ring-1 focus:ring-cyan-200 transition" />
       </div>
       <div>
-        <label class="font-label-caps text-label-caps text-slate-500 block mb-1.5" for="password" data-i18n="login.password">PASSWORD</label>
+        <label class="font-label-caps text-label-caps text-slate-500 block mb-1.5" for="password"
+          data-i18n="login.password">PASSWORD</label>
         <input id="password" name="password" type="password" required autocomplete="current-password"
           class="w-full bg-white/80 border border-slate-200 rounded-xl px-4 py-2.5 font-code-sm text-code-sm focus:outline-none focus:border-cyan-300 focus:ring-1 focus:ring-cyan-200 transition" />
       </div>
-      <p id="error" class="hidden font-code-sm text-code-sm text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2"></p>
-      <p id="info" class="hidden font-code-sm text-code-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2"></p>
+      <p id="error"
+        class="hidden font-code-sm text-code-sm text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">
+      </p>
+      <p id="info"
+        class="hidden font-code-sm text-code-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+      </p>
       <button type="submit" id="submitBtn"
         class="w-full bg-slate-900 text-white hover:bg-slate-800 px-6 py-3 rounded-xl font-label-caps text-label-caps transition-all flex items-center justify-center gap-2 shadow-lg shadow-slate-900/10 disabled:opacity-40">
-        <span class="material-symbols-outlined text-sm text-cyan-400">login</span> <span data-i18n="login.submit">SIGN IN</span>
+        <span class="material-symbols-outlined text-sm text-cyan-400">login</span> <span data-i18n="login.submit">SIGN
+          IN</span>
       </button>
       <p class="text-center">
-        <a href="#" id="forgotLink" class="font-code-sm text-[12px] text-cyan-600 hover:underline" data-i18n="login.forgot">Forgot password?</a>
+        <a href="#" id="forgotLink" class="font-code-sm text-[12px] text-cyan-600 hover:underline"
+          data-i18n="login.forgot">Forgot password?</a>
       </p>
     </form>
     <p class="font-code-sm text-[11px] text-slate-400 mt-6 text-center">
