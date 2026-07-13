@@ -67,6 +67,7 @@
       'intel.th_eco': 'ECOSYSTEM',
       'intel.th_cat': 'CATEGORY',
       'intel.th_asset': 'ASSET',
+      'intel.fix_info': 'Click RESOLVE to compute, via OSV.dev, the fixed version of every CVE affecting the package: the result is the minimum version that resolves them all. CVEs without a published fix are counted separately ("unfixed").',
       'intel.empty': 'No posture data yet. Run a scan.',
       // vuln match enum
       'vuln.VULNERABILE': 'VULNERABLE',
@@ -578,6 +579,7 @@
       'intel.th_eco': 'ECOSISTEMA',
       'intel.th_cat': 'CATEGORIA',
       'intel.th_asset': 'ASSET',
+      'intel.fix_info': 'Clicca RESOLVE per calcolare, tramite OSV.dev, la versione corretta per ogni CVE del pacchetto: il risultato è la versione minima che le risolve tutte. Le CVE senza fix pubblicata sono conteggiate a parte ("unfixed").',
       'intel.empty': 'Nessun dato di postura. Avvia una scansione.',
       // vuln match enum
       'vuln.VULNERABILE': 'VULNERABILE',
