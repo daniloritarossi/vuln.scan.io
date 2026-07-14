@@ -4,24 +4,24 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-echo "==> spengo il server FastAPI (uvicorn app:app)"
+echo "==> stopping FastAPI server (uvicorn app:app)"
 if pkill -f "uvicorn app:app"; then
-  echo "    server fermato"
+  echo "    server stopped"
 else
-  echo "    nessun server in esecuzione"
+  echo "    no server running"
 fi
 
-echo "==> spengo i container Supabase (i dati restano persistenti)"
+echo "==> stopping Supabase containers (data remains persistent)"
 docker compose -f supabase/docker-compose.yml down
 
 if docker ps -a --format '{{.Names}}' | grep -q '^vuln-test-linux-1$'; then
-  echo "==> stop e rimozione container di test vuln-test-linux-1"
+  echo "==> stopping and removing test container vuln-test-linux-1"
   docker rm -f vuln-test-linux-1
 fi
 
 if docker ps -a --format '{{.Names}}' | grep -q '^vuln-test-windows-1$'; then
-  echo "==> stop e rimozione container di test vuln-test-windows-1"
+  echo "==> stopping and removing test container vuln-test-windows-1"
   docker rm -f vuln-test-windows-1
 fi
 
-echo "==> fatto. Riavvio: ./start.sh"
+echo "==> done. Restart: ./start.sh"

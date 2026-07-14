@@ -7,14 +7,8 @@
   <meta content="width=device-width, initial-scale=1.0" name="viewport" />
   <title>VULN.SCAN.IO · Posture Management</title>
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
-  <link href="https://fonts.googleapis.com" rel="preconnect" />
-  <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect" />
-  <link
-    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&amp;family=JetBrains+Mono:wght@400;500;700&amp;display=swap"
-    rel="stylesheet" />
-  <link
-    href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
-    rel="stylesheet" />
+  <!-- Self-hosted fonts (Inter, JetBrains Mono, Material Symbols) -->
+  <link href="/static/vendor/fonts/fonts.css" rel="stylesheet" />
   <script src="/static/vendor/tailwind.js"></script>
   <script src="/static/vendor/chart.umd.min.js"></script>
   <script id="tailwind-config">
@@ -885,7 +879,7 @@
       </label>`).join('')
         : '<p class="font-code-sm text-[11px] text-slate-400 px-1">No assets.</p>';
       $('assetPickCount').textContent = selectedIps.size;
-      $('runScan').disabled = selectedIps.size === 0;
+      $('runScan').disabled = isViewer || selectedIps.size === 0;
     }
     $('assetPickBtn').addEventListener('click', (e) => { e.stopPropagation(); $('assetPickPanel').classList.toggle('hidden'); });
     document.addEventListener('click', (e) => { if (!e.target.closest('#assetPickPanel') && !e.target.closest('#assetPickBtn')) $('assetPickPanel').classList.add('hidden'); });
@@ -893,14 +887,16 @@
       const cb = e.target.closest('.asset-cb'); if (!cb) return;
       if (cb.checked) selectedIps.add(cb.dataset.ip); else selectedIps.delete(cb.dataset.ip);
       $('assetPickCount').textContent = selectedIps.size;
-      $('runScan').disabled = selectedIps.size === 0;
+      $('runScan').disabled = isViewer || selectedIps.size === 0;
     });
     $('assetAll').addEventListener('click', () => { assetList.forEach(a => selectedIps.add(a.ip)); renderPicker(); });
     $('assetNone').addEventListener('click', () => { selectedIps.clear(); renderPicker(); });
 
     // --- run scan (SSE) ---
     let es = null;
+    let isViewer = false;
     function runScan() {
+      if (isViewer) return;
       if (es) es.close();
       if (selectedIps.size === 0) return;
       assetsData = [];
@@ -929,6 +925,15 @@
       es.addEventListener('error', () => { $('progressLabel').textContent = 'error'; $('runScan').disabled = false; if (es) es.close(); });
     }
     $('runScan').addEventListener('click', runScan);
+    // Ruolo corrente -> adatta la UI (bottone scan nascosto ai viewer).
+    // Solo UI: l'enforcement vero è server-side su /api/posture/scan (_writer).
+    (window.vfaUser || Promise.resolve(null)).then((u) => {
+      if (u && u.role === 'viewer') {
+        isViewer = true;
+        $('runScan').disabled = true;
+        $('runScan').style.display = 'none';
+      }
+    });
     window.addEventListener('langchange', () => { if (assetsData.length) render(); });
     // Toggle tema: i colori dei canvas/SVG sono calcolati in JS → serve ridisegnare.
     window.addEventListener('themechange', () => { if (assetsData.length) render(); });

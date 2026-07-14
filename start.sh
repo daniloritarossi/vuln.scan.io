@@ -61,19 +61,19 @@ _pkg_install() {
   # _pkg_install pkg... (nomi logici stile Debian) → true se installazione riuscita
   local _mgr _sudo="" _p _pkgs=()
   if ! _mgr="$(_pkg_mgr)"; then
-    printf 'Nessun package manager noto (apt/dnf/yum/apk/pacman/zypper) — installa manualmente: %s\n' "$*" >&2
+    printf 'No known package manager (apt/dnf/yum/apk/pacman/zypper) — install manually: %s\n' "$*" >&2
     return 1
   fi
   if [ "$(id -u)" -ne 0 ]; then
     if command -v sudo >/dev/null 2>&1; then
       _sudo="sudo"
     else
-      printf 'Servono privilegi root e sudo non e'"'"' installato — esegui da root: %s install %s\n' "$_mgr" "$*" >&2
+      printf 'Root privileges required and sudo is not installed — run as root: %s install %s\n' "$_mgr" "$*" >&2
       return 1
     fi
   fi
   for _p in "$@"; do _pkgs+=("$(_pkg_map "$_mgr" "$_p")"); done
-  printf '==> installo automaticamente (%s): %s\n' "$_mgr" "${_pkgs[*]}" >&2
+  printf '==> auto-installing (%s): %s\n' "$_mgr" "${_pkgs[*]}" >&2
   case "$_mgr" in
     apt-get) $_sudo apt-get update -qq >&2 || true
              $_sudo apt-get install -y "${_pkgs[@]}" >&2 ;;
@@ -101,7 +101,7 @@ _install_go_tarball() {
   esac
   _v=$(curl -fsSL 'https://go.dev/VERSION?m=text' 2>/dev/null | head -n1)
   case "$_v" in go[0-9]*) ;; *) return 1 ;; esac   # sanity: atteso "go1.XX.Y"
-  printf '==> installo %s da go.dev in /usr/local/go\n' "$_v" >&2
+  printf '==> installing %s from go.dev into /usr/local/go\n' "$_v" >&2
   _tmp=$(mktemp)
   curl -fsSL "https://go.dev/dl/${_v}.linux-${_arch}.tar.gz" -o "$_tmp" || { rm -f "$_tmp"; return 1; }
   $_sudo rm -rf /usr/local/go
@@ -123,7 +123,7 @@ _install_compose_plugin() {
     aarch64|arm64) _arch=aarch64 ;;
     *)             return 1 ;;
   esac
-  printf '==> installo docker compose v2 da GitHub releases in %s\n' "$_dir" >&2
+  printf '==> installing docker compose v2 from GitHub releases into %s\n' "$_dir" >&2
   $_sudo mkdir -p "$_dir"
   $_sudo curl -fsSL \
     "https://github.com/docker/compose/releases/latest/download/docker-compose-linux-${_arch}" \
@@ -141,23 +141,23 @@ _preflight() {
     && _missing+=("python3-venv")
   [ "${#_missing[@]}" -eq 0 ] && return 0
 
-  printf 'Dipendenze di sistema mancanti: %s\n' "${_missing[*]}" >&2
+  printf 'Missing system dependencies: %s\n' "${_missing[*]}" >&2
   if ! _apt_install "${_missing[@]}"; then
-    printf 'ERRORE: installazione fallita. Installa manualmente col package manager della distro: %s\n' "${_missing[*]}" >&2
+    printf 'ERROR: installation failed. Install manually with your distro package manager: %s\n' "${_missing[*]}" >&2
     exit 1
   fi
   # ricontrollo post-install
   for _b in python3 curl git; do
     if ! command -v "$_b" >/dev/null 2>&1; then
-      printf 'ERRORE: %s ancora mancante dopo installazione.\n' "$_b" >&2
+      printf 'ERROR: %s still missing after installation.\n' "$_b" >&2
       exit 1
     fi
   done
   if ! python3 -c 'import venv, ensurepip' 2>/dev/null; then
-    printf 'ERRORE: modulo venv/ensurepip ancora mancante (python3-venv).\n' >&2
+    printf 'ERROR: venv/ensurepip module still missing (python3-venv).\n' >&2
     exit 1
   fi
-  printf '✓ Dipendenze installate.\n' >&2
+  printf '✓ Dependencies installed.\n' >&2
 }
 _preflight
 
@@ -178,44 +178,44 @@ _ensure_ollama() {
   # URL locale + binario assente -> installazione (script ufficiale), se consentita
   if [ "$_is_local" = "1" ] && ! command -v ollama >/dev/null 2>&1; then
     if [ "$_install" = "1" ]; then
-      printf '  Ollama non installato — installo (script ufficiale ollama.com, sudo richiesto).\n' >&2
+      printf '  Ollama not installed — installing (official ollama.com script, sudo required).\n' >&2
       # l'installer ollama richiede zstd per estrarre l'archivio
       command -v zstd >/dev/null 2>&1 || _pkg_install zstd || true
       curl -fsSL https://ollama.com/install.sh | sh >&2 \
-        || printf '  ⚠  Installazione fallita — installa manualmente: https://ollama.com/download\n' >&2
+        || printf '  ⚠  Installation failed — install manually: https://ollama.com/download\n' >&2
     else
-      printf '  ⚠  Ollama assente e installazione automatica disabilitata (scelta wizard).\n' >&2
-      printf '     Per cambiare: ./start.sh update -> AI provider.\n' >&2
+      printf '  ⚠  Ollama missing and auto-install disabled (wizard choice).\n' >&2
+      printf '     To change: ./start.sh update -> AI provider.\n' >&2
     fi
   fi
 
   # server locale installato ma non attivo -> avvialo in background
   if [ "$_is_local" = "1" ] && command -v ollama >/dev/null 2>&1 \
      && ! curl -sf --max-time 3 "$_base" >/dev/null 2>&1; then
-    printf '  ==> avvio ollama serve (background)...\n' >&2
+    printf '  ==> starting ollama serve (background)...\n' >&2
     (ollama serve >/dev/null 2>&1 &)
     sleep 2
   fi
 
   # verifica raggiungibilità + presenza modello (via /api/tags)
   if curl -sf --max-time 3 "$_base" >/dev/null 2>&1; then
-    printf '  ✓  Ollama raggiungibile.\n' >&2
+    printf '  ✓  Ollama reachable.\n' >&2
     if ! curl -sf --max-time 5 "$_base/api/tags" 2>/dev/null | grep -q "\"$_model"; then
       if command -v ollama >/dev/null 2>&1; then
         printf '  ==> ollama pull %s\n' "$_model" >&2
         ollama pull "$_model" >&2 \
-          || printf '  ⚠  pull fallito — esegui manualmente: ollama pull %s\n' "$_model" >&2
+          || printf '  ⚠  pull failed — run manually: ollama pull %s\n' "$_model" >&2
       else
-        printf '  ⚠  Modello assente sul server remoto: esegui li'"'"' "ollama pull %s".\n' "$_model" >&2
+        printf '  ⚠  Model missing on remote server: run "ollama pull %s" there.\n' "$_model" >&2
       fi
     fi
     if curl -sf --max-time 5 "$_base/api/tags" 2>/dev/null | grep -q "\"$_model"; then
-      printf '  ✓  Modello %s presente.\n' "$_model" >&2
+      printf '  ✓  Model %s present.\n' "$_model" >&2
     else
-      printf '  ⚠  Modello %s NON verificato — le funzioni AI falliranno finche'"'"' non e'"'"' disponibile.\n' "$_model" >&2
+      printf '  ⚠  Model %s NOT verified — AI features will fail until it is available.\n' "$_model" >&2
     fi
   else
-    printf '  ⚠  Ollama non raggiungibile a %s\n     Assicurati che sia avviato prima di usare le funzioni AI.\n' "$_base" >&2
+    printf '  ⚠  Ollama not reachable at %s\n     Make sure it is running before using AI features.\n' "$_base" >&2
   fi
 }
 
@@ -247,14 +247,14 @@ _choose() {
     ((_i++))
   done
   while true; do
-    printf '  Scelta [1]: ' >&2
+    printf '  Choice [1]: ' >&2
     read -r _sel
     _sel="${_sel:-1}"
     if [[ "$_sel" =~ ^[0-9]+$ ]] && [ "$_sel" -ge 1 ] && [ "$_sel" -le "${#_opts[@]}" ]; then
       printf '%s' "$_sel"
       return
     fi
-    printf '  Scelta non valida.\n' >&2
+    printf '  Invalid choice.\n' >&2
   done
 }
 
@@ -326,11 +326,11 @@ PYEOF
 # ── Wizard: AI ────────────────────────────────────────────────────────────────
 
 _wizard_ai() {
-  _sep "Configurazione AI" >&2
+  _sep "AI Configuration" >&2
   local _c
-  _c=$(_choose "Tipo modello AI:" \
-    "Locale — Ollama (modello gira sulla tua macchina)" \
-    "Remoto — Claude API (Anthropic, richiede API key)")
+  _c=$(_choose "AI model type:" \
+    "Local  — Ollama (model runs on your machine)" \
+    "Remote — Claude API (Anthropic, requires API key)")
 
   if [ "$_c" = "1" ]; then
     local _url _model _install=1
@@ -338,16 +338,16 @@ _wizard_ai() {
 
     # scelta modello LLM: default qwen2.5:7b, alternative comuni o nome libero
     local _mc
-    _mc=$(_choose "Quale modello LLM usare? (default: qwen2.5:7b)" \
-      "qwen2.5:7b   — Qwen 2.5 7B (consigliato, ~4.7 GB)" \
+    _mc=$(_choose "Which LLM model to use? (default: qwen2.5:7b)" \
+      "qwen2.5:7b   — Qwen 2.5 7B (recommended, ~4.7 GB)" \
       "llama3.1:8b  — Meta Llama 3.1 8B (~4.9 GB)" \
       "mistral:7b   — Mistral 7B (~4.1 GB)" \
-      "Altro        — inserisci il nome del modello (es. gemma2:9b)")
+      "Other        — enter the model name (e.g. gemma2:9b)")
     case "$_mc" in
       1) _model="qwen2.5:7b"  ;;
       2) _model="llama3.1:8b" ;;
       3) _model="mistral:7b"  ;;
-      4) _model=$(_ask "Nome modello Ollama" "qwen2.5:7b") ;;
+      4) _model=$(_ask "Ollama model name" "qwen2.5:7b") ;;
     esac
 
     # se URL locale e ollama assente: chiedi se installarlo
@@ -355,11 +355,11 @@ _wizard_ai() {
       *localhost*|*127.0.0.1*)
         if ! command -v ollama >/dev/null 2>&1; then
           local _yn
-          _yn=$(_ask "Ollama non e' installato. Installarlo ora? (s/n)" "s")
+          _yn=$(_ask "Ollama is not installed. Install it now? (y/n)" "y")
           case "$_yn" in
             s|S|y|Y) _install=1 ;;
             *)       _install=0
-                     printf '  ⚠  Installazione saltata — funzioni AI inattive finche'"'"' Ollama manca.\n' >&2 ;;
+                     printf '  ⚠  Installation skipped — AI features inactive while Ollama is missing.\n' >&2 ;;
           esac
         fi
         ;;
@@ -373,7 +373,7 @@ _wizard_ai() {
   else
     local _key _model
     _key=$(_ask_secret "Claude API Key")
-    _model=$(_ask "Modello Claude" "claude-haiku-4-5-20251001")
+    _model=$(_ask "Claude model" "claude-haiku-4-5-20251001")
     _json_write "ai.provider=claude" "ai.claude_api_key=$_key" "ai.claude_model=$_model"
     printf '  ✓  Provider: Claude API (%s)\n' "$_model" >&2
   fi
@@ -382,11 +382,11 @@ _wizard_ai() {
 # ── Wizard: Search Engine ─────────────────────────────────────────────────────
 
 _wizard_search() {
-  _sep "Configurazione Search Engine" >&2
+  _sep "Search Engine Configuration" >&2
   local _c
-  _c=$(_choose "Search engine OSINT:" \
-    "DuckDuckGo — gratuito, nessuna API key" \
-    "Serper     — risultati Google, richiede API key")
+  _c=$(_choose "OSINT search engine:" \
+    "DuckDuckGo — free, no API key" \
+    "Serper     — Google results, requires API key")
 
   if [ "$_c" = "1" ]; then
     _json_write "search_engine.provider=duckduckgo"
@@ -405,9 +405,9 @@ _add_to_assets() {
   # _add_to_assets IP OSTYPE OSVER
   local _ip="$1" _os="$2" _osver="$3"
   local _add
-  _add=$(_choose "Aggiungere all'inventario asset?" \
-    "Si — aggiungi con credenziali cifrate" \
-    "Si — aggiungi con password in chiaro" \
+  _add=$(_choose "Add to asset inventory?" \
+    "Yes — add with encrypted credentials" \
+    "Yes — add with plaintext password" \
     "No")
   [ "$_add" = "3" ] && return
   local _stored_pw="admin"
@@ -418,10 +418,10 @@ _add_to_assets() {
       if [ -n "$_enc" ]; then
         _stored_pw="ENC:$_enc"
       else
-        printf '  ⚠  Cifratura fallita — password salvata in chiaro.\n' >&2
+        printf '  ⚠  Encryption failed — password stored in plaintext.\n' >&2
       fi
     else
-      printf '  ⚠  Cifratura non configurata (encdec) — password salvata in chiaro.\n' >&2
+      printf '  ⚠  Encryption not configured (encdec) — password stored in plaintext.\n' >&2
     fi
   fi
   # Inserimento nella tabella 'assets' via PostgREST (Supabase locale).
@@ -437,25 +437,25 @@ _add_to_assets() {
        -H "apikey: $_sb_key" -H "Authorization: Bearer $_sb_key" \
        -H "Content-Type: application/json" \
        -d "$_payload" >/dev/null 2>&1; then
-    printf '  ✓  Aggiunto all'"'"'inventario (Supabase): %s (os=%s)\n' "$_ip" "$_os" >&2
+    printf '  ✓  Added to inventory (Supabase): %s (os=%s)\n' "$_ip" "$_os" >&2
   else
-    printf '  ⚠  Supabase non raggiungibile — asset NON aggiunto: %s\n' "$_ip" >&2
+    printf '  ⚠  Supabase not reachable — asset NOT added: %s\n' "$_ip" >&2
   fi
 }
 
 # ── Wizard: scelta macchina di test (Linux | Windows) ─────────────────────────
 
 _wizard_test_machine() {
-  _sep "Macchina di test (Docker)" >&2
+  _sep "Test machine (Docker)" >&2
   if ! docker info >/dev/null 2>&1; then
-    printf '  ⚠  Docker non in esecuzione — wizard saltato.\n' >&2
+    printf '  ⚠  Docker not running — wizard skipped.\n' >&2
     return
   fi
   local _c
-  _c=$(_choose "Quale macchina di test vuoi creare?" \
-    "Linux   — Ubuntu 20.04 + SSH + Python 3.6 (obsoleto)" \
-    "Windows — Win 11 (KVM) + Notepad++ 7.8.1 + PuTTY 0.70 (vulnerabili)" \
-    "Nessuna — salta")
+  _c=$(_choose "Which test machine do you want to create?" \
+    "Linux   — Ubuntu 20.04 + SSH + Python 3.6 (outdated)" \
+    "Windows — Win 11 (KVM) + Notepad++ 7.8.1 + PuTTY 0.70 (vulnerable)" \
+    "None    — skip")
   case "$_c" in
     1) _wizard_test_machine_linux   ;;
     2) _wizard_test_machine_windows ;;
@@ -466,7 +466,7 @@ _wizard_test_machine() {
 # ── Wizard: macchina Linux Docker di test ────────────────────────────────────
 
 _wizard_test_machine_linux() {
-  _sep "Macchina Linux di test (Docker)" >&2
+  _sep "Linux test machine (Docker)" >&2
 
   local _dir="$PWD/docker-test-machine"
   mkdir -p "$_dir"
@@ -493,23 +493,23 @@ EXPOSE 22
 CMD ["/usr/sbin/sshd", "-D"]
 DOCKEREOF
 
-  printf '\n  ==> build immagine vuln-test-linux (ubuntu:20.04 + python3.6 + sshd)...\n' >&2
+  printf '\n  ==> building vuln-test-linux image (ubuntu:20.04 + python3.6 + sshd)...\n' >&2
   docker build -t vuln-test-linux "$_dir" >&2 || {
-    printf '  ERRORE: build immagine fallita.\n' >&2; return
+    printf '  ERROR: image build failed.\n' >&2; return
   }
 
   docker rm -f vuln-test-linux-1 >/dev/null 2>&1 || true
 
-  printf '  ==> avvio container vuln-test-linux-1...\n' >&2
+  printf '  ==> starting container vuln-test-linux-1...\n' >&2
   docker run -d --name vuln-test-linux-1 vuln-test-linux >/dev/null || {
-    printf '  ERRORE: avvio container fallito.\n' >&2; return
+    printf '  ERROR: container start failed.\n' >&2; return
   }
 
   sleep 1
   local _ip
   _ip=$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' vuln-test-linux-1 2>/dev/null)
 
-  printf '\n  ✓  Container avviato\n' >&2
+  printf '\n  ✓  Container started\n' >&2
   printf '     IP  : %s\n' "$_ip" >&2
   printf '     SSH : ssh admin@%s  (password: admin)\n' "$_ip" >&2
   printf '     Test: ssh admin@%s python3.6 --version\n\n' "$_ip" >&2
@@ -524,13 +524,13 @@ DOCKEREOF
 
 _bios_virt_help() {
   local _vendor="${1:-VT-x / AMD-V}"
-  printf '\n  >> Abilita la virtualizzazione nel BIOS/UEFI (%s):\n' "$_vendor" >&2
-  printf '     1. Riavvio COMPLETO del PC (non sospensione).\n' >&2
-  printf '     2. All'"'"'accensione premi F2 (Lenovo: F2 o Fn+F2; in alternativa il\n' >&2
-  printf '        foro/pulsante "Novo" -> "BIOS Setup").\n' >&2
-  printf '     3. Vai in "Configuration" (o "Advanced").\n' >&2
-  printf '     4. Imposta "SVM Mode" (alias: AMD-V / Virtualization / VT-x) = Enabled.\n' >&2
-  printf '     5. F10 -> Save and Exit -> conferma. Lascia ripartire il sistema.\n\n' >&2
+  printf '\n  >> Enable virtualization in BIOS/UEFI (%s):\n' "$_vendor" >&2
+  printf '     1. FULLY restart the PC (not suspend).\n' >&2
+  printf '     2. At power-on press F2 (Lenovo: F2 or Fn+F2; alternatively the\n' >&2
+  printf '        "Novo" pinhole/button -> "BIOS Setup").\n' >&2
+  printf '     3. Go to "Configuration" (or "Advanced").\n' >&2
+  printf '     4. Set "SVM Mode" (alias: AMD-V / Virtualization / VT-x) = Enabled.\n' >&2
+  printf '     5. F10 -> Save and Exit -> confirm. Let the system restart.\n\n' >&2
 }
 
 # ── Wizard: macchina Windows di test (Docker + KVM, dockurr/windows) ──────────
@@ -540,7 +540,7 @@ _bios_virt_help() {
 # versioni vulnerabili di Notepad++ e PuTTY tramite gli script in ./oem.
 
 _wizard_test_machine_windows() {
-  _sep "Macchina Windows di test (Docker + KVM)" >&2
+  _sep "Windows test machine (Docker + KVM)" >&2
 
   # KVM non attivo -> la VM Windows non puo' partire. Mostra una guida coerente
   # (compresa l'abilitazione della virtualizzazione nel BIOS) SOLO in questo caso.
@@ -548,31 +548,31 @@ _wizard_test_machine_windows() {
     local _mod="kvm_intel" _vendor="VT-x"
     if grep -qi "AuthenticAMD" /proc/cpuinfo; then _mod="kvm_amd"; _vendor="AMD-V (SVM)"; fi
 
-    printf '  ⚠  KVM non attivo: /dev/kvm assente. La VM Windows non puo'"'"' partire.\n' >&2
-    printf '     (Windows nativo nanoserver/servercore NON gira su host Docker Linux;\n' >&2
-    printf '      serve una VM reale via QEMU/KVM, che richiede la virtualizzazione HW.)\n\n' >&2
+    printf '  ⚠  KVM not active: /dev/kvm missing. The Windows VM cannot start.\n' >&2
+    printf '     (Native Windows nanoserver/servercore does NOT run on a Linux Docker host;\n' >&2
+    printf '      a real VM via QEMU/KVM is required, which needs HW virtualization.)\n\n' >&2
 
     if ! grep -qiE "vmx|svm" /proc/cpuinfo; then
       # Caso A: nessun flag -> virtualizzazione spenta a livello BIOS.
-      printf '  La CPU non espone alcun flag di virtualizzazione: e'"'"' DISABILITATA nel BIOS.\n' >&2
+      printf '  The CPU exposes no virtualization flag: it is DISABLED in the BIOS.\n' >&2
       _bios_virt_help "$_vendor"
     else
       # Caso B: flag presente ma /dev/kvm assente -> modulo non caricato OPPURE
       # virtualizzazione bloccata/lockata nel BIOS (modprobe: "Operation not supported").
-      printf '  Step 1 — carica il modulo KVM:\n' >&2
+      printf '  Step 1 — load the KVM module:\n' >&2
       printf '       sudo modprobe %s\n' "$_mod" >&2
-      printf '       ls -l /dev/kvm                 # deve comparire\n\n' >&2
-      printf '  Se "modprobe" da'"'"' "Operation not supported", la virtualizzazione e'"'"'\n' >&2
-      printf '  bloccata nel BIOS (flag visibile ma SVM/VT-x lockato): abilitala.\n' >&2
+      printf '       ls -l /dev/kvm                 # must appear\n\n' >&2
+      printf '  If "modprobe" says "Operation not supported", virtualization is\n' >&2
+      printf '  locked in the BIOS (flag visible but SVM/VT-x locked): enable it.\n' >&2
       _bios_virt_help "$_vendor"
-      printf '  Step 2 — rendi persistente e dai i permessi:\n' >&2
+      printf '  Step 2 — make it persistent and grant permissions:\n' >&2
       printf '       echo "%s" | sudo tee /etc/modules-load.d/kvm.conf\n' "$_mod" >&2
-      printf '       sudo usermod -aG kvm "$USER"   # poi logout/login\n\n' >&2
+      printf '       sudo usermod -aG kvm "$USER"   # then logout/login\n\n' >&2
     fi
 
-    printf '  Poi riprova:  ./start.sh update  ->  3  ->  2 (Windows)\n' >&2
-    printf '  In alternativa senza BIOS: emulazione software (lenta) impostando\n' >&2
-    printf '  KVM:"N" nel compose, oppure un host Windows esterno (vedi README).\n' >&2
+    printf '  Then retry:  ./start.sh update  ->  3  ->  2 (Windows)\n' >&2
+    printf '  Alternatively, without BIOS: software emulation (slow) by setting\n' >&2
+    printf '  KVM:"N" in the compose file, or an external Windows host (see README).\n' >&2
     return
   fi
 
@@ -628,23 +628,23 @@ BATEOF
 
   docker rm -f vuln-test-windows-1 >/dev/null 2>&1 || true
 
-  printf '\n  ==> avvio VM Windows (dockurr/windows). Il primo avvio scarica e\n' >&2
-  printf '      installa Windows: puo'"'"' richiedere parecchi minuti.\n' >&2
+  printf '\n  ==> starting Windows VM (dockurr/windows). The first boot downloads and\n' >&2
+  printf '      installs Windows: it may take quite a few minutes.\n' >&2
   ( cd "$_dir" && docker compose up -d ) >&2 || {
-    printf '  ERRORE: avvio container Windows fallito.\n' >&2; return
+    printf '  ERROR: Windows container start failed.\n' >&2; return
   }
 
   sleep 2
   local _ip
   _ip=$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' vuln-test-windows-1 2>/dev/null)
 
-  printf '\n  ✓  Container Windows avviato (installazione in corso)\n' >&2
+  printf '\n  ✓  Windows container started (installation in progress)\n' >&2
   printf '     IP   : %s\n' "$_ip" >&2
   printf '     RDP  : localhost:3389        (admin / admin)\n' >&2
-  printf '     SSH  : ssh admin@%s     (password: admin, dopo l'"'"'install)\n' "$_ip" >&2
-  printf '     Web  : http://localhost:8006 (viewer installazione dockurr)\n\n' >&2
-  printf '  Nota: la scansione autenticata funziona solo a installazione completata\n' >&2
-  printf '        (OpenSSH attivo + Notepad++/PuTTY installati).\n' >&2
+  printf '     SSH  : ssh admin@%s     (password: admin, after install)\n' "$_ip" >&2
+  printf '     Web  : http://localhost:8006 (dockurr install viewer)\n\n' >&2
+  printf '  Note: authenticated scanning only works once installation completes\n' >&2
+  printf '        (OpenSSH active + Notepad++/PuTTY installed).\n' >&2
 
   if [ -n "$_ip" ]; then
     _add_to_assets "$_ip" windows 11
@@ -689,25 +689,25 @@ _download_update() {
   if [ -d .git ]; then
     printf '  ==> git fetch --tags && checkout %s\n' "$_tag" >&2
     if ! git diff --quiet 2>/dev/null; then
-      printf '  ATTENZIONE: modifiche locali non committate. Aggiornamento annullato.\n' >&2
-      printf '  Committa o scarta le modifiche, poi riprova.\n' >&2
+      printf '  WARNING: uncommitted local changes. Update cancelled.\n' >&2
+      printf '  Commit or discard the changes, then retry.\n' >&2
       return 1
     fi
-    git fetch --tags origin >&2 || { printf '  ERRORE: git fetch fallito.\n' >&2; return 1; }
-    git checkout "$_tag" >&2 || { printf '  ERRORE: checkout %s fallito.\n' "$_tag" >&2; return 1; }
+    git fetch --tags origin >&2 || { printf '  ERROR: git fetch failed.\n' >&2; return 1; }
+    git checkout "$_tag" >&2 || { printf '  ERROR: checkout %s failed.\n' "$_tag" >&2; return 1; }
   else
-    printf '  ==> download tarball %s da GitHub...\n' "$_tag" >&2
+    printf '  ==> downloading tarball %s from GitHub...\n' "$_tag" >&2
     local _tmp
     _tmp=$(mktemp -d)
     if ! curl -fsSL --max-time 120 \
         "https://github.com/${GITHUB_REPO}/archive/refs/tags/${_tag}.tar.gz" \
         -o "$_tmp/src.tar.gz"; then
-      printf '  ERRORE: download fallito.\n' >&2; rm -rf "$_tmp"; return 1
+      printf '  ERROR: download failed.\n' >&2; rm -rf "$_tmp"; return 1
     fi
     tar -xzf "$_tmp/src.tar.gz" -C "$_tmp" || { rm -rf "$_tmp"; return 1; }
     local _srcdir
     _srcdir=$(find "$_tmp" -maxdepth 1 -mindepth 1 -type d | head -1)
-    printf '  ==> applico i sorgenti (file runtime preservati)...\n' >&2
+    printf '  ==> applying sources (runtime files preserved)...\n' >&2
     rsync -a \
       --exclude 'config.json' \
       --exclude '.venv/' \
@@ -723,33 +723,33 @@ _download_update() {
 }
 
 _check_app_update() {
-  _sep "Controllo Aggiornamenti" >&2
+  _sep "Update Check" >&2
   local _cur _new
   _cur=$(_local_version)
-  printf '  Versione locale : %s\n' "$_cur" >&2
-  printf '  Controllo GitHub (%s)...\n' "$GITHUB_REPO" >&2
+  printf '  Local version   : %s\n' "$_cur" >&2
+  printf '  Checking GitHub (%s)...\n' "$GITHUB_REPO" >&2
   _new=$(_latest_version)
   if [ -z "$_new" ]; then
-    printf '  GitHub non raggiungibile o nessun tag trovato.\n' >&2
+    printf '  GitHub unreachable or no tags found.\n' >&2
     return
   fi
-  printf '  Ultima versione : %s\n' "$_new" >&2
+  printf '  Latest version  : %s\n' "$_new" >&2
   if [ "$_new" = "$_cur" ]; then
-    printf '\n  ✓ Sei gia'"'"' alla versione piu'"'"' recente.\n' >&2
+    printf '\n  ✓ You are already on the latest version.\n' >&2
     return
   fi
-  printf '\n  Nuova versione disponibile: %s -> %s\n' "$_cur" "$_new" >&2
+  printf '\n  New version available: %s -> %s\n' "$_cur" "$_new" >&2
   local _ok
-  _ok=$(_ask "Scaricare e installare ora? (s/n)" "s")
+  _ok=$(_ask "Download and install now? (y/n)" "y")
   case "$_ok" in
     s|S|y|Y)
       if _download_update "$_new"; then
-        printf '\n  ✓ Aggiornato a %s.\n' "$_new" >&2
-        printf '  Rilancia con ./start.sh per applicare (dipendenze e schema DB\n' >&2
-        printf '  vengono riallineati automaticamente all'"'"'avvio).\n' >&2
+        printf '\n  ✓ Updated to %s.\n' "$_new" >&2
+        printf '  Relaunch with ./start.sh to apply (dependencies and DB schema\n' >&2
+        printf '  are realigned automatically at startup).\n' >&2
       fi
       ;;
-    *) printf '  Aggiornamento annullato.\n' >&2 ;;
+    *) printf '  Update cancelled.\n' >&2 ;;
   esac
 }
 
@@ -757,21 +757,21 @@ _check_app_update() {
 
 _update_menu() {
   while true; do
-    _sep "Modifica Configurazione" >&2
+    _sep "Edit Configuration" >&2
     local _ai _se
     _ai=$(_json_read ai provider)
     _se=$(_json_read search_engine provider)
-    printf '  AI attuale    : %s\n' "$_ai" >&2
-    printf '  Search attuale: %s\n\n' "$_se" >&2
+    printf '  Current AI     : %s\n' "$_ai" >&2
+    printf '  Current search : %s\n\n' "$_se" >&2
 
     local _c
-    _c=$(_choose "Cosa vuoi modificare?" \
-      "AI provider (locale/remoto)" \
+    _c=$(_choose "What do you want to change?" \
+      "AI provider (local/remote)" \
       "Search engine (DuckDuckGo/Serper)" \
-      "Macchina di test Docker (Linux/Windows)" \
-      "Controlla aggiornamenti applicazione (GitHub)" \
-      "Salva ed esci (solo configurazione, non lancia)" \
-      "Salva e lancia l'app")
+      "Docker test machine (Linux/Windows)" \
+      "Check application updates (GitHub)" \
+      "Save and exit (configuration only, does not launch)" \
+      "Save and launch the app")
     case "$_c" in
       1) _wizard_ai           ;;
       2) _wizard_search        ;;
@@ -794,11 +794,11 @@ ENCDEC_DIR="$PWD/.encdec"
 if [ ! -x "$ENCDEC_BIN" ]; then
   printf '\n'
   printf '  ╔══════════════════════════════════════════════╗\n'
-  printf '  ║   encdec — setup cifratura password          ║\n'
+  printf '  ║   encdec — password encryption setup         ║\n'
   printf '  ╚══════════════════════════════════════════════╝\n'
-  printf '\n  Binario encdec non presente. Operazione unica: compilazione.\n'
-  printf '  Il prefisso segreto verra'"'"' compilato nel binario e non\n'
-  printf '  sara'"'"' mai piu'"'"' richiesto ne'"'"' salvato su disco.\n\n'
+  printf '\n  encdec binary not found. One-time operation: compilation.\n'
+  printf '  The secret prefix will be compiled into the binary and will\n'
+  printf '  never be asked again nor stored on disk.\n\n'
 
   _go_ok() {
     command -v go >/dev/null 2>&1 || return 1
@@ -807,22 +807,22 @@ if [ ! -x "$ENCDEC_BIN" ]; then
     [ "$_maj" -gt 1 ] || { [ "$_maj" -eq 1 ] && [ "$_min" -ge 21 ]; }
   }
   if ! _go_ok; then
-    printf '  Go >= 1.21 non trovato — provo installazione automatica (package manager).\n' >&2
+    printf '  Go >= 1.21 not found — trying automatic install (package manager).\n' >&2
     _apt_install golang || true
     if ! _go_ok; then
-      printf '  Go da package manager assente o troppo vecchio — provo tarball ufficiale go.dev.\n' >&2
+      printf '  Go from package manager missing or too old — trying official go.dev tarball.\n' >&2
       _install_go_tarball || true
     fi
     if ! _go_ok; then
-      printf '  ERRORE: Go >= 1.21 non disponibile. Installa manualmente da https://go.dev/dl/\n' >&2
+      printf '  ERROR: Go >= 1.21 not available. Install manually from https://go.dev/dl/\n' >&2
       exit 1
     fi
   fi
 
-  _PFX1=$(_ask_secret "Prefisso segreto per cifratura (inserito una sola volta)")
-  _PFX2=$(_ask_secret "Conferma prefisso segreto")
+  _PFX1=$(_ask_secret "Secret prefix for encryption (entered only once)")
+  _PFX2=$(_ask_secret "Confirm secret prefix")
   if [ "$_PFX1" != "$_PFX2" ]; then
-    printf '\n  ERRORE: I prefissi non corrispondono.\n' >&2
+    printf '\n  ERROR: prefixes do not match.\n' >&2
     unset _PFX1 _PFX2
     exit 1
   fi
@@ -830,7 +830,7 @@ if [ ! -x "$ENCDEC_BIN" ]; then
   mkdir -p "$ENCDEC_DIR"
   _TMP_ENCDEC=$(mktemp -d)
 
-  printf '\n  ==> clone encdec...\n' >&2
+  printf '\n  ==> cloning encdec...\n' >&2
   git clone --depth 1 https://github.com/daniloritarossi/encdec "$_TMP_ENCDEC/encdec" >&2
 
   # Patch: sostituisce defaultSecretKeyPrefix con il segreto scelto
@@ -847,17 +847,17 @@ open(path, 'w').write(src)
 PYEOF
   unset _PFX1 _PFX2
 
-  printf '  ==> build encdec (prefisso segreto compilato)...\n' >&2
+  printf '  ==> building encdec (secret prefix compiled in)...\n' >&2
   ( cd "$_TMP_ENCDEC/encdec" && go build -o "$ENCDEC_BIN" . ) >&2
   rm -rf "$_TMP_ENCDEC"
-  printf '  ✓  encdec compilato con segreto integrato: %s\n\n' "$ENCDEC_BIN" >&2
+  printf '  ✓  encdec built with embedded secret: %s\n\n' "$ENCDEC_BIN" >&2
 fi
 
 # ── MAIN: config phase ────────────────────────────────────────────────────────
 
 if [ "$MODE" = "update" ]; then
   if [ ! -f "$CONFIG_FILE" ]; then
-    printf '\n  Nessun config.json. Avvio wizard primo configurazione...\n\n' >&2
+    printf '\n  No config.json. Starting first-run wizard...\n\n' >&2
     _wizard_ai
     _wizard_search
     _wizard_test_machine
@@ -869,11 +869,11 @@ elif [ ! -f "$CONFIG_FILE" ]; then
   printf '  ╔══════════════════════════════════════════╗\n'
   printf '  ║  Vulnerability Feed Aggregator — Setup   ║\n'
   printf '  ╚══════════════════════════════════════════╝\n'
-  printf '\n  Prima configurazione. Invio = valore di default.\n'
+  printf '\n  First-time setup. Enter = default value.\n'
   _wizard_ai
   _wizard_search
   _wizard_test_machine
-  printf '\n  ✓ config.json creato.\n\n'
+  printf '\n  ✓ config.json created.\n\n'
 fi
 
 [ "$LAUNCH_APP" = "0" ] && exit 0
@@ -889,7 +889,7 @@ if [ "$AI_PROV" = "ollama" ] || [ -z "$AI_PROV" ]; then
   # rispetta la scelta fatta nel wizard (ai.ollama_autoinstall)
   _OLL_INST=1
   [ "$(_json_read ai ollama_autoinstall)" = "False" ] && _OLL_INST=0
-  echo "==> precheck AI: ollama + modello ${_OLL_MODEL}"
+  echo "==> AI precheck: ollama + model ${_OLL_MODEL}"
   _ensure_ollama "$_OLL_URL" "$_OLL_MODEL" "$_OLL_INST"
 fi
 
@@ -897,11 +897,11 @@ fi
 
 PYBIN=".venv/bin/python"
 if [ ! -x "$PYBIN" ]; then
-  echo "==> creo virtualenv .venv"
+  echo "==> creating virtualenv .venv"
   python3 -m venv .venv
 fi
 export PATH="$PWD/.venv/bin:$PATH"
-echo "==> installo/aggiorno dipendenze (requirements.txt)"
+echo "==> installing/updating dependencies (requirements.txt)"
 "$PYBIN" -m pip install -q --upgrade pip
 "$PYBIN" -m pip install -q -r requirements.txt
 
@@ -909,15 +909,15 @@ echo "==> installo/aggiorno dipendenze (requirements.txt)"
 
 if [ "$WITH_SUPABASE" = "1" ]; then
   if ! command -v docker >/dev/null 2>&1; then
-    echo "Docker non installato — provo installazione automatica (package manager)." >&2
+    echo "Docker not installed — trying automatic install (package manager)." >&2
     _apt_install docker.io || true
     if ! command -v docker >/dev/null 2>&1; then
-      echo "ERRORE: Docker non installabile automaticamente. Vedi https://docs.docker.com/engine/install/" >&2
+      echo "ERROR: Docker could not be installed automatically. See https://docs.docker.com/engine/install/" >&2
       exit 1
     fi
   fi
   if ! docker info >/dev/null 2>&1; then
-    echo "==> Docker daemon fermo — provo ad avviarlo" >&2
+    echo "==> Docker daemon stopped — trying to start it" >&2
     _sv=""; [ "$(id -u)" -ne 0 ] && _sv="sudo"
     if command -v systemctl >/dev/null 2>&1; then
       $_sv systemctl start docker >/dev/null 2>&1 || true
@@ -934,7 +934,7 @@ if [ "$WITH_SUPABASE" = "1" ]; then
     done
     # nessun init system utilizzabile (container/WSL) -> dockerd diretto
     if ! docker info >/dev/null 2>&1 && command -v dockerd >/dev/null 2>&1; then
-      echo "==> init system non disponibile — avvio dockerd in background (log: /var/log/dockerd.log)" >&2
+      echo "==> no init system available — starting dockerd in background (log: /var/log/dockerd.log)" >&2
       $_sv sh -c 'nohup dockerd >/var/log/dockerd.log 2>&1 &' || true
       for _i in 1 2 3 4 5 6 7 8 9 10; do
         docker info >/dev/null 2>&1 && break
@@ -942,33 +942,33 @@ if [ "$WITH_SUPABASE" = "1" ]; then
       done
     fi
     if ! docker info >/dev/null 2>&1; then
-      echo "ERRORE: Docker non in esecuzione o permessi mancanti." >&2
-      echo "  Se il daemon e' attivo ma l'accesso e' negato: sudo usermod -aG docker \$USER  (poi logout/login)" >&2
-      echo "  Se il daemon non parte: controlla /var/log/dockerd.log o 'journalctl -u docker'." >&2
+      echo "ERROR: Docker not running or missing permissions." >&2
+      echo "  If the daemon is running but access is denied: sudo usermod -aG docker \$USER  (then logout/login)" >&2
+      echo "  If the daemon does not start: check /var/log/dockerd.log or 'journalctl -u docker'." >&2
       if [ "$(id -u)" -eq 0 ] && [ -f /var/log/dockerd.log ] \
          && grep -q "you must be root\|Permission denied" /var/log/dockerd.log 2>/dev/null; then
         echo "" >&2
-        echo "  Rilevato ambiente confinato: il kernel nega iptables/nftables anche a root." >&2
-        echo "  Probabilmente sei in un container non privilegiato (es. LXC). Opzioni:" >&2
-        echo "    - Proxmox LXC (da host): pct set <ID> --features nesting=1,keyctl=1  poi riavvia il container" >&2
-        echo "    - usa una VM invece di un container" >&2
-        echo "    - salta Docker/Supabase: ./start.sh --no-supabase" >&2
+        echo "  Confined environment detected: the kernel denies iptables/nftables even to root." >&2
+        echo "  You are probably in an unprivileged container (e.g. LXC). Options:" >&2
+        echo "    - Proxmox LXC (from host): pct set <ID> --features nesting=1,keyctl=1  then restart the container" >&2
+        echo "    - use a VM instead of a container" >&2
+        echo "    - skip Docker/Supabase: ./start.sh --no-supabase" >&2
       fi
       exit 1
     fi
   fi
   if ! docker compose version >/dev/null 2>&1; then
-    echo "Plugin 'docker compose' (v2) mancante — provo installazione automatica." >&2
+    echo "'docker compose' plugin (v2) missing — trying automatic install." >&2
     _apt_install docker-compose-plugin || _apt_install docker-compose-v2 || _install_compose_plugin || true
     if ! docker compose version >/dev/null 2>&1; then
-      echo "ERRORE: plugin 'docker compose' v2 non installabile. Installa manualmente il plugin compose v2 per la tua distro." >&2
+      echo "ERROR: 'docker compose' v2 plugin could not be installed. Install the compose v2 plugin for your distro manually." >&2
       exit 1
     fi
   fi
-  echo "==> avvio Supabase locale (Docker)"
+  echo "==> starting local Supabase (Docker)"
   ( cd supabase && ./setup.sh )
 else
-  echo "==> salto Supabase (--no-supabase)"
+  echo "==> skipping Supabase (--no-supabase)"
 fi
 
 # ── 3) Server FastAPI (foreground) ────────────────────────────────────────────
@@ -985,7 +985,7 @@ cat <<EOF
   AI         : ${AI_PROV}
   Search     : ${SE_PROV}
 ============================================================
-  Ctrl+C ferma l'app. Supabase resta attivo → ./stop.sh
+  Ctrl+C stops the app. Supabase stays running → ./stop.sh
 
 EOF
 
