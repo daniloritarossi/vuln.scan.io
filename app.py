@@ -100,7 +100,7 @@ def _git_version() -> str:
 APP_VERSION = _git_version()
 
 # Repo GitHub per il check aggiornamenti (override con VFA_GITHUB_REPO).
-GITHUB_REPO = os.environ.get("VFA_GITHUB_REPO", "daniloritarossi/vuln.scan.io")
+GITHUB_REPO = os.environ.get("VFA_GITHUB_REPO", "daniloritarossi/vuln.scan.o")
 
 
 def _base_tag(version: str) -> str:

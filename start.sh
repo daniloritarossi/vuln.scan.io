@@ -653,7 +653,7 @@ BATEOF
 
 # ── Aggiornamento applicazione (check tag GitHub + download sorgenti) ────────
 
-GITHUB_REPO="${VFA_GITHUB_REPO:-daniloritarossi/vuln.scan.io}"
+GITHUB_REPO="${VFA_GITHUB_REPO:-daniloritarossi/vuln.scan.o}"
 
 _local_version() {
   # Tag base locale: 'v1.0.11-alfa-3-gabc' -> 'v1.0.11-alfa'. 'dev' se niente git.
