@@ -23,3 +23,8 @@ docker-test-machine-windows
 .claude
 *.log
 *.pid
+
+# ── Segreti runtime: MAI committare ──
+.vfa_auth_secret
+assets.txt.migrated
+assets.txt
