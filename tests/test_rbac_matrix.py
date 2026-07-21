@@ -80,7 +80,7 @@ GATE_ONLY_MATRIX = [
     ("POST", "/api/findings/import", {"json": {}}, WRITER),
     ("PATCH", "/api/findings/999999/status", {"json": {}}, WRITER),
     ("POST", "/api/findings/999999/ticket", {"json": {}}, WRITER),
-    ("POST", "/api/findings/scan-local", {"json": {}}, WRITER),
+    ("POST", "/api/findings/scan-local", {"json": {}}, ADMIN_MANAGER),
     ("GET", "/api/posture/scan", {}, WRITER),
     ("POST", "/api/identify", {"json": {}}, WRITER),
     ("GET", "/api/scan", {}, WRITER),

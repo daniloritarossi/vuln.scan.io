@@ -588,7 +588,7 @@ def api_findings_ticket(finding_id: int, user: CurrentUser = Depends(_writer)):
 
 @app.post("/api/findings/scan-local")
 async def api_findings_scan_local(request: Request,
-                                  user: CurrentUser = Depends(_writer)):
+                                  user: CurrentUser = Depends(_admin_manager)):
     """
     Esegue uno scanner LOCALE (binario opzionale sul server) e ne ingerisce
     il report nel ciclo di vita unificato.
@@ -596,8 +596,10 @@ async def api_findings_scan_local(request: Request,
            "asset_ip": "<opzionale>"}.
       - secrets -> gitleaks sulla directory 'target'
       - image   -> trivy (vuln + secret) sull'immagine container 'target'
-    Editor: 'asset_ip' obbligatorio e dentro il cono di visibilita' (i finding
-    devono restare attribuibili a un asset assegnato).
+    Solo admin/manager: 'target' e' un path filesystem o un riferimento
+    immagine arbitrario scelto dal chiamante, non verificabile contro il
+    cono di visibilita' di un asset (l'asset_ip serve solo per l'etichetta
+    dei finding) — non e' un'operazione da lasciare a 'editor'.
     """
     body = await request.json()
     scan_type = (body.get("type") or "").strip().lower()
@@ -605,11 +607,6 @@ async def api_findings_scan_local(request: Request,
     asset_ip = (body.get("asset_ip") or "").strip()
     if not target:
         return JSONResponse({"error": "Missing target"}, status_code=400)
-    if user.scoped:
-        if not asset_ip:
-            raise Forbidden("Per il ruolo editor 'asset_ip' e' obbligatorio "
-                            "(deve essere un asset assegnato)")
-        _require_ip_in_scope(user, asset_ip)
     try:
         if scan_type == "secrets":
             raw, tool = run_gitleaks(target), "gitleaks"
